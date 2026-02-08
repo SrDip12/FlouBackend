@@ -49,6 +49,17 @@ class StrategyRAG:
                 
         except Exception as e:
             logger.error(f"Error inicializando RAG: {e}")
+            
+            # DIAGNÓSTICO: Listar modelos disponibles para ver cuál podemos usar
+            try:
+                logger.info("--- DIAGNÓSTICO DE MODELOS DISPONIBLES ---")
+                for m in self.client.models.list():
+                    if 'embedContent' in m.supported_generation_methods:
+                        logger.info(f"Modelo disponible para embeddings: {m.name}")
+                logger.info("------------------------------------------")
+            except Exception as debug_e:
+                logger.error(f"Error listando modelos: {debug_e}")
+
             # Estrategia fallback dummy si falla la carga
             self.strategies = [{
                 "nombre": "Estrategia General",
