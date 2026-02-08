@@ -6,13 +6,14 @@ from typing import Dict, List, Optional
 from google import genai
 from google.genai import types
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.schemas.chat import Slots
 
 logger = logging.getLogger(__name__)
 
 class StrategyRAG:
     def __init__(self, strategies_file_path: str):
+        settings = get_settings()
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
         self.strategies = []
         self.embeddings = []
