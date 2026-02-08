@@ -17,6 +17,7 @@ class ProfileSettings(BaseModel):
     """Modelo para actualizar preferencias de usuario"""
     theme_preference: Optional[ThemePreference] = Field(None, description="Preferencia de tema de UI")
     language_preference: Optional[LanguagePreference] = Field(None, description="Preferencia de idioma")
+    research_consent: Optional[bool] = Field(None, description="Consentimiento para uso de datos en investigación")
 
 class ProfileBase(BaseModel):
     full_name: Optional[str] = None
@@ -27,6 +28,7 @@ class ProfileBase(BaseModel):
     avatar_url: Optional[str] = None
     theme_preference: Optional[ThemePreference] = ThemePreference.SYSTEM
     language_preference: Optional[LanguagePreference] = LanguagePreference.ES
+    research_consent: Optional[bool] = False
 
 class ProfileResponse(ProfileBase):
     """Modelo completo de respuesta de perfil"""
