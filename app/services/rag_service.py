@@ -33,10 +33,17 @@ class StrategyRAG:
             
             if texts_to_embed:
                 # Llamada a la API v2 (text-embedding-004)
-                response = self.client.models.embed_content(
-                    model='text-embedding-004',
-                    contents=texts_to_embed
-                )
+                try:
+                    response = self.client.models.embed_content(
+                        model='models/text-embedding-004',
+                        contents=texts_to_embed
+                    )
+                except Exception:
+                    # Fallback a un modelo más antiguo si el 004 no está disponible
+                    response = self.client.models.embed_content(
+                        model='models/embedding-001',
+                        contents=texts_to_embed
+                    )
                 # Extraer vectores
                 self.embeddings = [e.values for e in response.embeddings]
                 
@@ -71,10 +78,17 @@ class StrategyRAG:
         try:
             # 2. BÚSQUEDA SEMÁNTICA (Vectorial)
             # Vectorizar la query del usuario
-            query_resp = self.client.models.embed_content(
-                model='text-embedding-004',
-                contents=user_query
-            )
+            try:
+                query_resp = self.client.models.embed_content(
+                    model='models/text-embedding-004',
+                    contents=user_query
+                )
+            except Exception:
+                # Fallback
+                query_resp = self.client.models.embed_content(
+                    model='models/embedding-001',
+                    contents=user_query
+                )
             query_embedding = query_resp.embeddings[0].values
             
             # Calcular similitud coseno solo con los candidatos válidos

@@ -20,7 +20,7 @@ from app.schemas.chat import (
     StreamChunk
 )
 from app.services.ai_service import handle_user_turn, extract_slots_from_text
-from app.core.supabase_client import get_supabase_client
+from app.core.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -34,7 +34,7 @@ async def create_chat_session(session_data: ChatSessionCreate):
     """
     Crea una nueva sesión de chat para el usuario.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase()
     
     try:
         # Crear sesión en Supabase
@@ -90,7 +90,7 @@ async def get_user_sessions(user_id: UUID, active_only: bool = True):
     """
     Obtiene todas las sesiones de chat de un usuario.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase()
     
     try:
         query = supabase.table("chat_sessions").select("*").eq("user_id", str(user_id))
@@ -137,7 +137,7 @@ async def send_message(message_data: ChatMessageRequest):
     Envía un mensaje al chatbot y obtiene una respuesta.
     Mantiene la lógica científica de metamotivación.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase()
     
     try:
         # 1. Obtener o crear sesión
@@ -249,7 +249,7 @@ async def get_chat_history(session_id: UUID, limit: int = 50):
     """
     Obtiene el historial completo de una sesión de chat.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase()
     
     try:
         # Obtener sesión
@@ -314,7 +314,7 @@ async def submit_feedback(feedback: FeedbackRequest):
     Registra feedback del usuario sobre una respuesta de la IA.
     Crítico para mejorar las estrategias de metamotivación.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase()
     
     try:
         # Obtener el mensaje para extraer user_id
