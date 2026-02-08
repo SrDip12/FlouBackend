@@ -32,16 +32,17 @@ class StrategyRAG:
             ]
             
             if texts_to_embed:
-                # Llamada a la API v2 (text-embedding-004)
+                # Llamada a la API v2 (text-embedding-004) - Sin prefijo 'models/'
                 try:
                     response = self.client.models.embed_content(
-                        model='models/text-embedding-004',
+                        model='text-embedding-004',
                         contents=texts_to_embed
                     )
-                except Exception:
-                    # Fallback a un modelo más antiguo si el 004 no está disponible
+                except Exception as e:
+                    logger.warning(f"Fallo embedding primario ({e}), intentando fallback...")
+                    # Fallback a un modelo más antiguo
                     response = self.client.models.embed_content(
-                        model='models/embedding-001',
+                        model='embedding-001',
                         contents=texts_to_embed
                     )
                 # Extraer vectores
@@ -50,12 +51,14 @@ class StrategyRAG:
         except Exception as e:
             logger.error(f"Error inicializando RAG: {e}")
             
-            # DIAGNÓSTICO: Listar modelos disponibles para ver cuál podemos usar
+            # DIAGNÓSTICO: Listar modelos disponibles
             try:
                 logger.info("--- DIAGNÓSTICO DE MODELOS DISPONIBLES ---")
                 for m in self.client.models.list():
-                    if 'embedContent' in m.supported_generation_methods:
-                        logger.info(f"Modelo disponible para embeddings: {m.name}")
+                    # Verificar soporte de embedding de forma segura
+                    methods = getattr(m, 'supported_generation_methods', [])
+                    if 'embedContent' in methods:
+                        logger.info(f"Modelo disponible: {m.name}")
                 logger.info("------------------------------------------")
             except Exception as debug_e:
                 logger.error(f"Error listando modelos: {debug_e}")
@@ -91,13 +94,14 @@ class StrategyRAG:
             # Vectorizar la query del usuario
             try:
                 query_resp = self.client.models.embed_content(
-                    model='models/text-embedding-004',
+                    model='text-embedding-004',
                     contents=user_query
                 )
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Error vectorizando query ({e}), usando fallback.")
                 # Fallback
                 query_resp = self.client.models.embed_content(
-                    model='models/embedding-001',
+                    model='embedding-001',
                     contents=user_query
                 )
             query_embedding = query_resp.embeddings[0].values
