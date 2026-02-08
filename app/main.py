@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import get_settings
-from app.routers import profiles, wellness, info, feedback
+from app.routers import profiles, wellness, info, feedback, chat
 from app.core.i18n import get_translation, detect_user_language
 
 settings = get_settings()
@@ -45,6 +45,7 @@ app.include_router(profiles.router, prefix="/profiles", tags=["profiles"])
 app.include_router(wellness.router, prefix="/wellness", tags=["wellness"])
 app.include_router(info.router, prefix="/info", tags=["info"])
 app.include_router(feedback.router, prefix="/feedback", tags=["feedback"])
+app.include_router(chat.router, prefix="/chat", tags=["chat"])
 
 @app.get("/")
 async def root():

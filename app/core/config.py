@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
     
+    # Gemini AI
+    GEMINI_API_KEY: str
+    
     # CORS
     ALLOWED_ORIGINS: List[str] = ["*"]
 
