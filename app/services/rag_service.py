@@ -37,41 +37,33 @@ class StrategyRAG:
             ]
             
             if texts_to_embed:
-                try:
-                    # INTENTO 1: Nombre limpio (text-embedding-004)
-                    try:
-                        chosen_model = 'text-embedding-004'
-                        response = self.client.models.embed_content(
-                            model=chosen_model,
-                            contents=texts_to_embed
-                        )
-                        self.embedding_model = chosen_model
-                        logger.info(f"✅ Éxito con {chosen_model}")
-                    except Exception as e1:
-                        logger.warning(f"Fallo text-embedding-004 ({e1}), probando con prefijo...")
-                        
-                        # INTENTO 2: Con prefijo (models/text-embedding-004)
-                        chosen_model = 'models/text-embedding-004'
-                        response = self.client.models.embed_content(
-                            model=chosen_model,
-                            contents=texts_to_embed
-                        )
-                        self.embedding_model = chosen_model
-                        logger.info(f"✅ Éxito con {chosen_model}")
+                # Usamos el modelo exacto detectado para esta API Key
+                self.embedding_model = 'models/gemini-embedding-001'
                 
-                except Exception as e2:
-                    logger.warning(f"Fallo models/text-embedding-004 ({e2}), usando fallback LEGACY...")
-                    
-                    # INTENTO 3: Fallback (models/embedding-001)
-                    self.embedding_model = 'models/embedding-001'
+                try:
                     response = self.client.models.embed_content(
                         model=self.embedding_model,
                         contents=texts_to_embed
                     )
-                    logger.info(f"⚠️ Usando fallback {self.embedding_model}")
-
-                # Extraer vectores
-                self.embeddings = [e.values for e in response.embeddings]
+                    logger.info(f"✅ Éxito generando embeddings con {self.embedding_model}")
+                    
+                    # Extraer vectores
+                    self.embeddings = [e.values for e in response.embeddings]
+                
+                except Exception as e:
+                    logger.error(f"❌ Error CRÍTICO inicializando RAG con {self.embedding_model}: {e}")
+                    # Fallback de emergencia a cualquier embedding-001 por si acaso
+                    try:
+                        fallback = 'models/embedding-001'
+                        response = self.client.models.embed_content(
+                            model=fallback,
+                            contents=texts_to_embed
+                        )
+                        self.embedding_model = fallback
+                        self.embeddings = [e.values for e in response.embeddings]
+                        logger.info(f"✅ Recuperado con fallback {fallback}")
+                    except Exception as e2:
+                        logger.error(f"❌ Falló también el fallback: {e2}")
                 
         except Exception as e:
             logger.error(f"❌ Error CRÍTICO inicializando RAG: {e}")
