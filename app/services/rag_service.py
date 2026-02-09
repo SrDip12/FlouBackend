@@ -14,10 +14,14 @@ logger = logging.getLogger(__name__)
 class StrategyRAG:
     def __init__(self, strategies_file_path: str):
         settings = get_settings()
-        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        # Forzamos uso de API v1 (Estable) para evitar 404 en embeddings
+        self.client = genai.Client(
+            api_key=settings.GEMINI_API_KEY,
+            http_options={'api_version': 'v1'}
+        )
         self.strategies = []
         self.embeddings = []
-        self.embedding_model = 'models/text-embedding-004' # Default optimista
+        self.embedding_model = 'text-embedding-004' # Nombre limpio estándar en v1
         
         # Cargar estrategias
         try:
