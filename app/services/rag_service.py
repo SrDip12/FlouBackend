@@ -17,6 +17,7 @@ class StrategyRAG:
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
         self.strategies = []
         self.embeddings = []
+        self.embedding_model = 'models/text-embedding-004' # Default optimista
         
         # Cargar estrategias
         try:
@@ -32,34 +33,55 @@ class StrategyRAG:
             ]
             
             if texts_to_embed:
-                # Llamada a la API v2 (text-embedding-004) - Sin prefijo 'models/'
                 try:
+                    # INTENTO 1: Nombre limpio (text-embedding-004)
+                    try:
+                        chosen_model = 'text-embedding-004'
+                        response = self.client.models.embed_content(
+                            model=chosen_model,
+                            contents=texts_to_embed
+                        )
+                        self.embedding_model = chosen_model
+                        logger.info(f"✅ Éxito con {chosen_model}")
+                    except Exception as e1:
+                        logger.warning(f"Fallo text-embedding-004 ({e1}), probando con prefijo...")
+                        
+                        # INTENTO 2: Con prefijo (models/text-embedding-004)
+                        chosen_model = 'models/text-embedding-004'
+                        response = self.client.models.embed_content(
+                            model=chosen_model,
+                            contents=texts_to_embed
+                        )
+                        self.embedding_model = chosen_model
+                        logger.info(f"✅ Éxito con {chosen_model}")
+                
+                except Exception as e2:
+                    logger.warning(f"Fallo models/text-embedding-004 ({e2}), usando fallback LEGACY...")
+                    
+                    # INTENTO 3: Fallback (models/embedding-001)
+                    self.embedding_model = 'models/embedding-001'
                     response = self.client.models.embed_content(
-                        model='text-embedding-004',
+                        model=self.embedding_model,
                         contents=texts_to_embed
                     )
-                except Exception as e:
-                    logger.warning(f"Fallo embedding primario ({e}), intentando fallback...")
-                    # Fallback a un modelo más antiguo
-                    response = self.client.models.embed_content(
-                        model='embedding-001',
-                        contents=texts_to_embed
-                    )
+                    logger.info(f"⚠️ Usando fallback {self.embedding_model}")
+
                 # Extraer vectores
                 self.embeddings = [e.values for e in response.embeddings]
                 
         except Exception as e:
-            logger.error(f"Error inicializando RAG: {e}")
+            logger.error(f"❌ Error CRÍTICO inicializando RAG: {e}")
             
-            # DIAGNÓSTICO: Listar modelos disponibles
+            # DIAGNÓSTICO PROFUNDO
             try:
-                logger.info("--- DIAGNÓSTICO DE MODELOS DISPONIBLES ---")
+                logger.info("--- DIAGNÓSTICO DE MODELOS REALES ---")
                 for m in self.client.models.list():
-                    # Verificar soporte de embedding de forma segura
                     methods = getattr(m, 'supported_generation_methods', [])
                     if 'embedContent' in methods:
-                        logger.info(f"Modelo disponible: {m.name}")
-                logger.info("------------------------------------------")
+                        # Loguear nombre REAL y versión
+                        version = getattr(m, 'version', 'unknown')
+                        logger.info(f"📍 MODELO: {m.name} | VERSIÓN: {version}")
+                logger.info("---------------------------------------")
             except Exception as debug_e:
                 logger.error(f"Error listando modelos: {debug_e}")
 
@@ -91,19 +113,22 @@ class StrategyRAG:
 
         try:
             # 2. BÚSQUEDA SEMÁNTICA (Vectorial)
-            # Vectorizar la query del usuario
+            # Vectorizar la query usando el modelo que sabemos que funciona
             try:
                 query_resp = self.client.models.embed_content(
-                    model='text-embedding-004',
+                    model=self.embedding_model,
                     contents=user_query
                 )
             except Exception as e:
-                logger.warning(f"Error vectorizando query ({e}), usando fallback.")
-                # Fallback
+                logger.warning(f"Error vectorizando query con {self.embedding_model} ({e}), reintentando...")
+                # Intento desesperado con fallback legacy si el modelo guardado falla de repente
+                fallback = 'models/embedding-001'
                 query_resp = self.client.models.embed_content(
-                    model='embedding-001',
+                    model=fallback,
                     contents=user_query
                 )
+                self.embedding_model = fallback # Actualizamos para siguiente vez
+            
             query_embedding = query_resp.embeddings[0].values
             
             # Calcular similitud coseno solo con los candidatos válidos
