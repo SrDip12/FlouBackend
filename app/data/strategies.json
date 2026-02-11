@@ -1,75 +1,206 @@
 [
-    {
-        "id": "debug_rubber_duck",
-        "nombre": "Rubber Duck Debugging",
-        "tags": [
-            "coding",
-            "bloqueo",
-            "error",
-            "frustracion",
-            "hacker",
-            "bug"
-        ],
-        "tiempo_min": 5,
-        "vibe": "HACKER",
-        "prompt_instruction": "Actúa como un Senior Developer mentor. Pide al usuario que te explique el error línea por línea, como si fueras un pato de goma. El objetivo es que verbalice la lógica para encontrar el fallo él mismo. Usa jerga técnica (stack trace, null pointer, race condition) para generar confianza."
-    },
-    {
-        "id": "speedrun_any_percent",
-        "nombre": "Dirty Speedrun Any%",
-        "tags": [
-            "ensayo",
-            "escritura",
-            "perfeccionismo",
-            "aburrimiento",
-            "gamer",
-            "avance"
-        ],
-        "tiempo_min": 15,
-        "vibe": "GAMER",
-        "prompt_instruction": "Actúa como un Speedrunner de videojuegos. El objetivo es cantidad, no calidad. Reta al usuario a 'glitchear' la tarea escribiendo lo máximo posible en 15 minutos sin corregir nada. Usa metáforas de gaming: 'No importa si el código es spaghetti, importa llegar al checkpoint'."
-    },
-    {
-        "id": "quirofano_zen",
-        "nombre": "Protocolo de Quirófano",
-        "tags": [
-            "ansiedad",
-            "miedo",
-            "detalle",
-            "revision",
-            "zen",
-            "abrumado"
-        ],
-        "tiempo_min": 10,
-        "vibe": "ZEN",
-        "prompt_instruction": "Baja el tono de voz (metafóricamente). Actúa con calma clínica absoluta. Pide al usuario que cierre todas las pestañas menos una. La instrucción es: 'Solo existe este párrafo/función. Nada más'. El objetivo es reducir la carga cognitiva al mínimo."
-    },
-    {
-        "id": "arquitecto_sistemas",
-        "nombre": "Modo Arquitecto",
-        "tags": [
-            "planificacion",
-            "ideacion",
-            "caos",
-            "inicio",
-            "abstracto"
-        ],
-        "tiempo_min": 10,
-        "vibe": "PROFESIONAL",
-        "prompt_instruction": "Pide al usuario que se aleje del teclado. Prohíbe escribir código o párrafos. Solo se permiten diagramas, flechas y cajas. Actúa como un Arquitecto de Software que diseña la solución de alto nivel antes de ensuciarse las manos."
-    },
-    {
-        "id": "save_point_emotional",
-        "nombre": "Checkpoint Emocional",
-        "tags": [
-            "baja_autoeficacia",
-            "tristeza",
-            "impostor",
-            "no_puedo",
-            "gamer"
-        ],
-        "tiempo_min": 5,
-        "vibe": "SUPPORT",
-        "prompt_instruction": "Validación pura. El usuario siente que no avanza. Hazle listar 3 cosas que YA funcionan o que YA sabe, por pequeñas que sean. Dile: 'Juego Guardado. No has perdido tu progreso'. Solo entonces sugiere el siguiente paso micro."
-    }
+  {
+    "id": "lluvia_ideas_rapida",
+    "nombre": "Lluvia de Ideas Sin Filtro",
+    "category": "PROMOCION_EAGER",
+    "fit": "eager_creativo",
+    "descripcion": "Genera todas las ideas que puedas sin juzgarlas",
+    "nivel_recomendado": "↑",
+    "tareas": ["ensayo", "borrador", "presentacion", "esquema"],
+    "fases": ["ideacion", "planificacion"],
+    "tiempo_minimo": 10,
+    "template": "Perfecto, vamos a aprovechar esa energía. 🚀\n\n**Tu misión (próximos {tiempo} min):**\n1. Abre un documento en blanco\n2. Escribe TODAS las ideas que se te ocurran sobre {tema}\n3. No borres NADA - cantidad sobre calidad por ahora\n4. Tip: Usa palabras clave sueltas, no frases perfectas\n\n**¿Por qué funciona?** Tu cerebro en modo promoción es genial generando posibilidades. ¡Aprovéchalo!\n\n¿Le damos? 💪"
+  },
+  {
+    "id": "avance_rapido_cantidad",
+    "nombre": "Avance Rápido: Prioriza Cantidad",
+    "category": "PROMOCION_EAGER",
+    "fit": "eager_creativo",
+    "descripcion": "Escribe sin detenerte, ignorando errores temporalmente",
+    "nivel_recomendado": "↓",
+    "tareas": ["ensayo", "borrador", "lectura_tecnica"],
+    "fases": ["ejecucion"],
+    "tiempo_minimo": 15,
+    "template": "Entiendo que quieres avanzar rápido. ¡Usemos eso! ⚡\n\n**Tu bloque de {tiempo} min:**\n1. Pon un timer (no lo mires hasta que suene)\n2. Escribe sin parar - no corrijas NADA\n3. Si te atascas, escribe \"XXXX\" y sigue\n4. Meta: {cantidad} párrafos/páginas mínimo\n\n**Regla de oro:** Los errores se corrigen DESPUÉS. Ahora solo avanza.\n\n¿Listo/a? 🏃"
+  },
+  {
+    "id": "exploracion_divergente",
+    "nombre": "Exploración Multi-Perspectiva",
+    "category": "PROMOCION_EAGER",
+    "fit": "eager_creativo",
+    "descripcion": "Explora múltiples ángulos de un problema sin comprometerte",
+    "nivel_recomendado": "↑",
+    "tareas": ["ensayo", "presentacion", "esquema"],
+    "fases": ["ideacion", "planificacion"],
+    "tiempo_minimo": 12,
+    "template": "Vamos a abrir tu mente a todas las posibilidades. 🌟\n\n**Ejercicio ({tiempo} min):**\n- Pregunta: \"¿Qué pasaría si...?\" sobre {tema}\n- Anota 3 perspectivas diferentes (no importa si son \"locas\")\n- Para cada una, escribe 2-3 pros/cons rápidos\n- No elijas nada todavía - solo explora\n\n**¿Por qué?** Tu cerebro necesita jugar antes de decidir.\n\n¿Te tinca? 🎨"
+  },
+  {
+    "id": "prototipo_imperfecto",
+    "nombre": "Prototipo Rápido e Imperfecto",
+    "category": "PROMOCION_EAGER",
+    "fit": "eager_creativo",
+    "descripcion": "Crea una versión mínima funcional sin pulir",
+    "nivel_recomendado": "↓",
+    "tareas": ["presentacion", "esquema", "coding", "protocolo_lab"],
+    "fases": ["ejecucion"],
+    "tiempo_minimo": 15,
+    "template": "Hagamos un \"esqueleto\" funcional ahora. 🦴\n\n**En {tiempo} min, crea:**\n- Estructura básica (títulos/secciones)\n- 1 ejemplo o slide por sección\n- Nada de formato bonito todavía\n- Meta: Que se entienda la idea central\n\n**Mantra:** \"Hecho es mejor que perfecto (por ahora).\"\n\n¿Vamos? 💪"
+  },
+  {
+    "id": "checklist_revision",
+    "nombre": "Checklist de Revisión Sistemática",
+    "category": "PREVENCION_VIGILANT",
+    "fit": "vigilant_precision",
+    "descripcion": "Revisa el trabajo punto por punto para evitar errores",
+    "nivel_recomendado": "↓",
+    "tareas": ["proofreading", "revision"],
+    "fases": ["revision"],
+    "tiempo_minimo": 10,
+    "template": "Vamos a revisar con calma y asegurarnos de que todo esté bien. ✓\n\n**Checklist ({tiempo} min):**\n1. **Gramática:** Lee en voz alta, detecta errores\n2. **Estructura:** ¿Tiene introducción/desarrollo/cierre?\n3. **Coherencia:** ¿Las ideas fluyen?\n4. **Formato:** ¿Cumple requisitos (fuente, márgenes)?\n\nUsa un ✓ al completar cada paso. Ve lento, es normal.\n\n¿Empezamos? 🔍"
+  },
+  {
+    "id": "lectura_anotada",
+    "nombre": "Lectura Anotada y Crítica",
+    "category": "PREVENCION_VIGILANT",
+    "fit": "vigilant_precision",
+    "descripcion": "Lee cuidadosamente tomando notas de precisión",
+    "nivel_recomendado": "↓",
+    "tareas": ["lectura_tecnica", "resumen"],
+    "fases": ["ejecucion"],
+    "tiempo_minimo": 15,
+    "template": "Vamos a leer con atención de detective. 🔎\n\n**Protocolo de {tiempo} min:**\n1. Lee UN párrafo a la vez\n2. Subraya conceptos clave\n3. Anota en el margen: \"¿Qué dice esto?\"\n4. Si algo no queda claro, marca con \"?\"\n\n**No avances si no entendiste.** Mejor poco bien hecho.\n\n¿Te parece? 📚"
+  },
+  {
+    "id": "verificacion_doble",
+    "nombre": "Verificación Doble de Errores",
+    "category": "PREVENCION_VIGILANT",
+    "fit": "vigilant_precision",
+    "descripcion": "Revisa dos veces con enfoques diferentes",
+    "nivel_recomendado": "↓",
+    "tareas": ["proofreading", "coding", "resolver_problemas"],
+    "fases": ["revision"],
+    "tiempo_minimo": 12,
+    "template": "Doble verificación para estar seguro/a. 🛡️\n\n**Ronda 1 ({mitad_tiempo} min):** Lee de corrido, marca errores obvios\n**Ronda 2 ({mitad_tiempo} min):** Lee AL REVÉS (última oración primero), busca typos\n\n**¿Por qué al revés?** Tu cerebro no \"autocompleta\", ve lo que REALMENTE dice.\n\n¿Listo para el detective mode? 🕵️"
+  },
+  {
+    "id": "validacion_criterios",
+    "nombre": "Validación por Criterios de Rúbrica",
+    "category": "PREVENCION_VIGILANT",
+    "fit": "vigilant_precision",
+    "descripcion": "Verifica cumplimiento punto por punto de criterios",
+    "nivel_recomendado": "↓",
+    "tareas": ["ensayo", "presentacion", "protocolo_lab"],
+    "fases": ["revision"],
+    "tiempo_minimo": 10,
+    "template": "Vamos a verificar que cumples TODOS los requisitos. ✅\n\n**Revisión de {tiempo} min:**\n1. Abre la rúbrica/instrucciones del profe\n2. Crea una tabla: Criterio | ¿Cumple? | Evidencia\n3. Revisa UNO por uno (sin saltar)\n4. Si falta algo, anótalo para después\n\n**Meta:** Cero sorpresas en la evaluación.\n\n¿Vamos? 📋"
+  },
+  {
+    "id": "deteccion_errores_comunes",
+    "nombre": "Detección de Errores Frecuentes",
+    "category": "PREVENCION_VIGILANT",
+    "fit": "vigilant_precision",
+    "descripcion": "Busca errores que sueles cometer",
+    "nivel_recomendado": "↓",
+    "tareas": ["proofreading", "coding", "resolver_problemas"],
+    "fases": ["revision"],
+    "tiempo_minimo": 10,
+    "template": "Vamos a buscar tus \"errores favoritos\". 🎯\n\n**Cazando bugs ({tiempo} min):**\n1. ¿Qué errores sueles cometer? (ej: \"haber/a ver\", punto y coma en código)\n2. Usa \"Buscar\" (Ctrl+F) para cada uno\n3. Revisa SOLO esos casos específicos\n4. Corrígelos uno por uno\n\n**Tip:** Crea tu lista personal de \"errores a vigilar\".\n\n¿Le entramos? 🔧"
+  },
+  {
+    "id": "vision_proposito",
+    "nombre": "Conectar con el Propósito Superior",
+    "category": "ABSTRACTO",
+    "fit": "abstracto_autocontrol",
+    "descripcion": "Reflexiona sobre el 'por qué' de la tarea",
+    "enfoque_recomendado": "promocion_eager",
+    "tareas": ["ensayo", "presentacion", "lectura_tecnica"],
+    "fases": ["ideacion", "planificacion"],
+    "tiempo_minimo": 5,
+    "template": "Antes de ponerte a trabajar, conéctate con el \"por qué\". 🎯\n\n**Reflexión ({tiempo} min):**\n- ¿Por qué es importante este trabajo PARA TI?\n- ¿Qué vas a aprender/lograr con esto?\n- ¿Cómo se conecta con tus metas más grandes?\n\nEscribe 2-3 frases sobre esto. Cuando te distraigas, vuelve a leerlas.\n\n¿Te hace sentido? 🌟"
+  },
+  {
+    "id": "mapa_mental_global",
+    "nombre": "Mapa Mental de Visión Global",
+    "category": "ABSTRACTO",
+    "fit": "abstracto_autocontrol",
+    "descripcion": "Visualiza la estructura completa antes de detalles",
+    "enfoque_recomendado": "promocion_eager",
+    "tareas": ["ensayo", "esquema", "presentacion"],
+    "fases": ["ideacion", "planificacion"],
+    "tiempo_minimo": 10,
+    "template": "Vamos a ver el \"bosque completo\" antes de los árboles. 🌲🌳\n\n**Mapa mental ({tiempo} min):**\n1. En el centro: Idea principal\n2. Ramas grandes: 3-4 temas principales\n3. Sub-ramas: Ideas secundarias (opcional)\n4. NO escribas oraciones - solo conceptos\n\n**Meta:** Entender la arquitectura general.\n\n¿Vamos a dibujarlo? 🎨"
+  },
+  {
+    "id": "objetivo_futuro",
+    "nombre": "Visualización del Yo Futuro",
+    "category": "ABSTRACTO",
+    "fit": "abstracto_autocontrol",
+    "descripcion": "Imagina cómo te sentirás al completar la tarea",
+    "enfoque_recomendado": "promocion_eager",
+    "tareas": ["cualquiera"],
+    "fases": ["cualquiera"],
+    "tiempo_minimo": 3,
+    "template": "Hagamos un ejercicio rápido de visualización. ✨\n\n**Imaginación guiada ({tiempo} min):**\nCierra los ojos. Imagínate:\n- Ya terminaste {tarea}\n- ¿Cómo te sientes? (orgullo, alivio, satisfacción)\n- ¿Qué puedes hacer ahora que terminaste?\n- Visualiza ese momento con detalle\n\nAbre los ojos. AHORA trabajemos para llegar allá.\n\n¿Listo/a? 🚀"
+  },
+  {
+    "id": "pasos_micro",
+    "nombre": "Desglose en Micro-Pasos",
+    "category": "CONCRETO",
+    "fit": "concreto_precision_motora",
+    "descripcion": "Divide la tarea en acciones específicas y pequeñas",
+    "enfoque_recomendado": "prevencion_vigilant",
+    "tareas": ["cualquiera"],
+    "fases": ["ejecucion"],
+    "tiempo_minimo": 10,
+    "template": "Vamos a hacer esto súper simple, paso a paso. 🪜\n\n**Tu plan de {tiempo} min:**\n1. {paso_1}\n2. {paso_2}\n3. {paso_3}\n\n**Importante:** Haz UNO a la vez. Cuando termines uno, táchalo. No pienses en el siguiente hasta terminar el actual.\n\n¿Empezamos por el paso 1? ⬜→✅"
+  },
+  {
+    "id": "protocolo_rigido",
+    "nombre": "Protocolo Paso a Paso Riguroso",
+    "category": "CONCRETO",
+    "fit": "concreto_precision_motora",
+    "descripcion": "Sigue un algoritmo fijo sin desviaciones",
+    "enfoque_recomendado": "prevencion_vigilant",
+    "tareas": ["protocolo_lab", "coding", "resolver_problemas"],
+    "fases": ["ejecucion"],
+    "tiempo_minimo": 15,
+    "template": "Vamos a seguir un protocolo estricto. 🧪\n\n**Instrucciones de {tiempo} min:**\nPaso 1: {paso_1_detallado}\nPaso 2: {paso_2_detallado}\nPaso 3: {paso_3_detallado}\n\n**REGLAS:**\n- No saltes pasos\n- No improvises\n- Si algo falla, anótalo y sigue\n\n¿Entendido el protocolo? 🔬"
+  },
+  {
+    "id": "checklist_micro",
+    "nombre": "Checklist de Tareas Mínimas",
+    "category": "CONCRETO",
+    "fit": "concreto_precision_motora",
+    "descripcion": "Lista de tareas pequeñas y verificables",
+    "enfoque_recomendado": "prevencion_vigilant",
+    "tareas": ["cualquiera"],
+    "fases": ["ejecucion", "revision"],
+    "tiempo_minimo": 10,
+    "template": "Aquí está tu checklist ultra-específico. ☑️\n\n**En {tiempo} min, completa:**\n☐ {item_1}\n☐ {item_2}\n☐ {item_3}\n\nMarca cada ☐ cuando termines. Siente la satisfacción de cada \"✓\".\n\n¿Vamos por el primero? 📝"
+  },
+  {
+    "id": "sprint_estructurado",
+    "nombre": "Sprint Estructurado",
+    "category": "MIXTAS",
+    "enfoque": "promocion_eager",
+    "nivel": "↓",
+    "descripcion": "Avance rápido con pasos claros",
+    "tareas": ["coding", "resolver_problemas", "borrador"],
+    "fases": ["ejecucion"],
+    "tiempo_minimo": 15,
+    "template": "Vamos a combinar velocidad con estructura. ⚡📋\n\n**Sprint de {tiempo} min:**\n1. Timer activado (sin distracciones)\n2. Sigue esta secuencia EXACTA:\n   - {paso_1} (5 min)\n   - {paso_2} (5 min)\n   - {paso_3} (5 min)\n3. Si terminas antes, empieza el siguiente\n4. Meta: Completar los 3 pasos\n\n¿Listo para el sprint? 🏃‍♀️"
+  },
+  {
+    "id": "reflexion_cautelosa",
+    "nombre": "Reflexión Cautelosa Pre-Acción",
+    "category": "MIXTAS",
+    "enfoque": "prevencion_vigilant",
+    "nivel": "↑",
+    "descripcion": "Planificación estratégica para evitar errores",
+    "tareas": ["ensayo", "presentacion", "protocolo_lab"],
+    "fases": ["planificacion"],
+    "tiempo_minimo": 10,
+    "template": "Antes de actuar, planifiquemos con cuidado. 🤔\n\n**Reflexión estratégica ({tiempo} min):**\n1. ¿Qué podría salir mal en este trabajo?\n2. ¿Qué requisitos NO debo olvidar?\n3. ¿Qué recursos necesito tener a mano?\n4. Plan B si algo falla: ___\n\n**¿Por qué esto?** Prevenir es mejor que corregir.\n\n¿Te hace sentido? 🛡️"
+  }
 ]

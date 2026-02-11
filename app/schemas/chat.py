@@ -13,7 +13,11 @@ class Slots(BaseModel):
     Estos parámetros son fundamentales para la selección de estrategias de metamotivación.
     """
     sentimiento: Optional[str] = None  # "frustrado", "ansioso", "bloqueado", etc.
+    sentimiento_otro: Optional[str] = None
     tipo_tarea: Optional[str] = None   # "coding", "ensayo", "debugging", etc.
+    ramo: Optional[str] = None
+    plazo: Optional[str] = None        # "hoy", "<24h", "esta_semana", ">1_semana"
+    fase: Optional[str] = None         # "ideacion", "planificacion", "ejecucion", "revision"
     tiempo_bloque: Optional[int] = 15  # Minutos disponibles
     nivel_urgencia: Optional[str] = None  # "alta", "media", "baja"
     autoeficacia: Optional[str] = None  # "alta", "media", "baja"

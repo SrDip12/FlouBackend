@@ -19,7 +19,7 @@ from app.schemas.chat import (
     FeedbackRequest,
     StreamChunk
 )
-from app.services.ai_service import handle_user_turn, extract_slots_from_text
+from app.services.ai_service import handle_user_turn
 from app.core.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -185,21 +185,31 @@ async def send_message(message_data: ChatMessageRequest):
                 "parts": [msg["content"]]
             })
         
-        # 4. Preparar estado de sesión
-        # TODO: Recuperar estado persistido de la DB si existe
-        session_state = SessionStateSchema(
-            session_id=session_id,
-            user_id=message_data.user_id,
-            slots=Slots()
-        )
+        # 4. Preparar estado de sesión (Recuperar persistencia)
+        current_state_json = session_result.data.get("current_state", {})
+        if current_state_json and isinstance(current_state_json, dict) and "slots" in current_state_json:
+            try:
+                # Reconstuimos el estado desde el JSON guardado
+                session_state = SessionStateSchema(**current_state_json)
+                # Aseguramos que IDs sigan coincidiendo (por si acaso)
+                session_state.session_id = session_id
+                session_state.user_id = message_data.user_id
+            except Exception as e:
+                logger.warning(f"Error parseando estado de sesión: {e}, reiniciando estado.")
+                session_state = SessionStateSchema(
+                    session_id=session_id,
+                    user_id=message_data.user_id,
+                    slots=Slots()
+                )
+        else:
+            session_state = SessionStateSchema(
+                session_id=session_id,
+                user_id=message_data.user_id,
+                slots=Slots()
+            )
         
-        # 5. Extraer slots del mensaje del usuario
-        session_state.slots = await extract_slots_from_text(
-            message_data.content, 
-            session_state.slots
-        )
-        
-        # 6. Generar respuesta con IA (Mantiene lógica científica)
+        # 5. Pipeline de IA (Extracción + Estrategia + Generación)
+        # NOTA: extract_slots ahora ocurre DENTRO de handle_user_turn
         ai_reply, updated_session, quick_replies, metadata = await handle_user_turn(
             session=session_state,
             user_text=message_data.content,
@@ -207,6 +217,14 @@ async def send_message(message_data: ChatMessageRequest):
             chat_history=chat_history
         )
         
+        # 6. Persistir el NUEVO estado de la sesión
+        try:
+             supabase.table("chat_sessions").update({
+                 "current_state": updated_session.model_dump(mode='json')
+             }).eq("id", str(session_id)).execute()
+        except Exception as e:
+             logger.error(f"Error guardando estado de sesión: {e}")
+
         # 7. Guardar respuesta de la IA
         ai_msg = supabase.table("chat_messages").insert({
             "session_id": str(session_id),
