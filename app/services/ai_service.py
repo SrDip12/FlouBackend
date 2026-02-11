@@ -1,10 +1,8 @@
 import logging
 import json
-import uuid
 import time
-from typing import Optional, Dict, List, AsyncGenerator
-from google import genai
-from google.genai import types
+from typing import Optional, Dict, List
+from groq import Groq
 
 from app.core.config import get_settings
 from app.schemas.chat import SessionStateSchema, Slots
@@ -15,9 +13,15 @@ logger = logging.getLogger(__name__)
 # Obtener configuración
 settings = get_settings()
 
-# Nuevo Cliente Unificado
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
-MODEL_NAME = 'gemini-2.5-flash'  # Modelo actualizado
+# Nuevo Cliente Groq
+# Inicializamos cliente solo si hay API Key, si no, fallará en tiempo de ejecución de manera controlada o aquí mismo.
+try:
+    client = Groq(api_key=settings.GROQ_API_KEY)
+except Exception as e:
+    logger.error(f"Error inicializando cliente Groq: {e}")
+    client = None
+
+MODEL_NAME = 'llama-3.3-70b-versatile'
 
 async def handle_user_turn(
     session: SessionStateSchema, 
@@ -30,7 +34,6 @@ async def handle_user_turn(
     
     Retorna: (reply_text, updated_session, quick_replies, metadata)
     """
-    import time
     start_time = time.time()
     
     # 1. Recuperar Estrategia Inteligente (RAG)
@@ -65,39 +68,34 @@ Tu objetivo es desbloquear al estudiante usando la estrategia seleccionada.
 5. Adapta tu tono al vibe: ZEN (calmado), SUPPORT (validador), PROFESIONAL (directo).
 """
     
-    # 4. Preparar historial para la nueva API
-    contents = []
+    # 4. Preparar historial para la nueva API (OpenAI compatible)
+    messages = [{"role": "system", "content": system_instruction}]
+    
     if chat_history:
         for msg in chat_history[-6:]:  # Solo últimos 6 mensajes para mantener contexto relevante
-            role = "user" if msg.get("role") == "user" else "model"
-            contents.append(types.Content(
-                role=role,
-                parts=[types.Part.from_text(text=msg.get("parts", [""])[0])]
-            ))
+            # Mapear roles: 'model' -> 'assistant', 'user' -> 'user'
+            role = "user" if msg.get("role") == "user" else "assistant"
+            content = msg.get("parts", [""])[0] 
+            messages.append({"role": role, "content": str(content)})
     
-    # Agregar contexto adicional si existe (ej: código que está debuggeando)
+    # Agregar contexto adicional si existe
+    final_user_text = user_text
     if context:
-        user_text = f"{user_text}\n\n[Contexto adicional: {context}]"
+        final_user_text = f"{user_text}\n\n[Contexto adicional: {context}]"
     
     # Agregar el mensaje actual
-    contents.append(types.Content(
-        role="user",
-        parts=[types.Part.from_text(text=user_text)]
-    ))
+    messages.append({"role": "user", "content": final_user_text})
 
     try:
-        # 5. Generación con Gemini 2.5
-        response = client.models.generate_content(
+        # 5. Generación con Groq
+        completion = client.chat.completions.create(
             model=MODEL_NAME,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.7,
-                max_output_tokens=350
-            )
+            messages=messages,
+            temperature=0.7,
+            max_tokens=350
         )
         
-        reply = response.text
+        reply = completion.choices[0].message.content
         
         # 6. Actualizar sesión
         session.iteration += 1
@@ -113,7 +111,7 @@ Tu objetivo es desbloquear al estudiante usando la estrategia seleccionada.
             "strategy_id": estrategia.get('id'),
             "strategy_name": estrategia['nombre'],
             "vibe": estrategia['vibe'],
-            "confidence_score": 0.85,  # Placeholder - podría calcularse con embeddings
+            "confidence_score": 0.85,  # Placeholder
             "detected_slots": session.slots.model_dump(),
             "processing_time_ms": processing_time,
             "iteration": session.iteration
@@ -128,7 +126,7 @@ Tu objetivo es desbloquear al estudiante usando la estrategia seleccionada.
         return reply, session, quick_replies, metadata
 
     except Exception as e:
-        logger.error(f"Error en generación Gemini: {e}", exc_info=True)
+        logger.error(f"Error en generación Groq: {e}", exc_info=True)
         
         # Fallback con estrategia de emergencia
         fallback_reply = _get_fallback_response(session.slots.sentimiento)
@@ -198,13 +196,13 @@ def _get_fallback_response(sentimiento: Optional[str]) -> str:
 
 
 # ============================================================================
-# FUNCIÓN AUXILIAR: Extracción de Slots (Mantiene lógica científica)
+# FUNCIÓN AUXILIAR: Extracción de Slots (Groq JSON Mode)
 # ============================================================================
 
 async def extract_slots_from_text(user_text: str, current_slots: Slots) -> Slots:
     """
     Extrae slots emocionales y contextuales del texto del usuario.
-    Usa Gemini para análisis semántico avanzado.
+    Usa Groq Llama 3 en modo JSON.
     """
     try:
         extraction_prompt = f"""
@@ -218,22 +216,23 @@ Extrae:
 3. nivel_urgencia: alta, media, baja
 4. autoeficacia: alta (confiado), media, baja (síndrome del impostor)
 
-Responde SOLO en formato JSON:
+Responde SOLO un objeto JSON válido con estas claves:
 {{"sentimiento": "...", "tipo_tarea": "...", "nivel_urgencia": "...", "autoeficacia": "..."}}
 """
         
-        response = client.models.generate_content(
+        completion = client.chat.completions.create(
             model=MODEL_NAME,
-            contents=extraction_prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.3,
-                max_output_tokens=100
-            )
+            messages=[
+                {"role": "system", "content": "Eres un extractor de datos. Responde JSON válido."},
+                {"role": "user", "content": extraction_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+            max_tokens=100
         )
         
         # Parsear JSON de la respuesta
-        import json
-        extracted = json.loads(response.text.strip())
+        extracted = json.loads(completion.choices[0].message.content)
         
         # Actualizar solo los campos que se detectaron
         for key, value in extracted.items():

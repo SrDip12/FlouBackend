@@ -4,5 +4,6 @@ supabase==2.14.0
 pydantic==2.10.6
 pydantic-settings==2.7.1
 python-dotenv==1.0.1
-google-genai==1.62.0
+groq
+sentence-transformers
 numpy==2.2.2

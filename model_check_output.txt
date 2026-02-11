@@ -1,0 +1,7 @@
+Usando API Key: AIzaS...V-OI
+
+--- 🔍 Modelos Detectados ---
+✅ ID: models/gemini-embedding-001
+   Versión: 001
+   Métodos: ['embedContent', 'countTextTokens', 'countTokens', 'asyncBatchEmbedContent']
+------------------------------
