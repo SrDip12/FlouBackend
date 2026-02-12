@@ -389,22 +389,31 @@ async def clear_chat_session(session_id: UUID):
         session_result = supabase.table("chat_sessions")\
             .select("id")\
             .eq("id", str(session_id))\
-            .single()\
+            .maybe_single()\
             .execute()
         
         if not session_result.data:
             raise HTTPException(status_code=404, detail="Sesión no encontrada")
         
         # 1. Eliminar todos los mensajes de la sesión
-        supabase.table("chat_messages")\
-            .delete()\
-            .eq("session_id", str(session_id))\
-            .execute()
+        try:
+            supabase.table("chat_messages")\
+                .delete()\
+                .eq("session_id", str(session_id))\
+                .execute()
+            logger.info(f"Mensajes de sesión {session_id} eliminados.")
+        except Exception as del_err:
+            logger.warning(f"No se pudieron eliminar mensajes (puede que no haya): {del_err}")
         
         # 2. Reiniciar el estado de la IA (current_state) a vacío
-        supabase.table("chat_sessions").update({
-            "current_state": {}
-        }).eq("id", str(session_id)).execute()
+        #    Nota: requiere que la migración 20260211_add_session_state.sql se haya aplicado
+        try:
+            supabase.table("chat_sessions").update({
+                "current_state": {}
+            }).eq("id", str(session_id)).execute()
+            logger.info(f"Estado de sesión {session_id} reiniciado.")
+        except Exception as state_err:
+            logger.warning(f"No se pudo reiniciar current_state (columna puede no existir): {state_err}")
         
         logger.info(f"Sesión {session_id} limpiada exitosamente.")
         return {"status": "ok", "message": "Chat limpiado exitosamente"}
