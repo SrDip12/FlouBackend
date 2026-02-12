@@ -152,7 +152,7 @@ def extract_slots_heuristic(free_text: str, current_slots: Slots) -> Slots:
         tipo_tarea=guess_tipo_tarea(free_text) or current_slots.tipo_tarea,
         plazo=guess_plazo(free_text) or current_slots.plazo,
         fase=guess_fase(free_text) or current_slots.fase,
-        tiempo_bloque=guess_tiempo_bloque(free_text) or current_slots.tiempo_bloque or 15
+        tiempo_bloque=guess_tiempo_bloque(free_text) or current_slots.tiempo_bloque
     )
 
 
@@ -511,7 +511,8 @@ async def handle_user_turn(
         ], {}
 
     # Fallback: si no se extrajo tiempo después de varias iteraciones, usar 15 min
-    if not session.slots.tiempo_bloque:
+    # Solo si ya pasamos la fase de preguntas y estamos forzando una estrategia
+    if not session.slots.tiempo_bloque and session.iteration > 8:
         session.slots.tiempo_bloque = 15
 
     # 4. Inferir Q2/Q3/Enfoque
@@ -526,7 +527,7 @@ async def handle_user_turn(
         nivel=Q3,
         tipo_tarea=session.slots.tipo_tarea,
         fase=session.slots.fase,
-        tiempo_disponible=session.slots.tiempo_bloque,
+        tiempo_disponible=session.slots.tiempo_bloque or 15, # Fallback solo para selección
         sentimiento=session.slots.sentimiento
     )
     
@@ -538,7 +539,7 @@ async def handle_user_turn(
             enfoque=enfoque, nivel=Q3,
             tipo_tarea=session.slots.tipo_tarea,
             fase=session.slots.fase,
-            tiempo_disponible=session.slots.tiempo_bloque,
+            tiempo_disponible=session.slots.tiempo_bloque or 15,
             sentimiento=session.slots.sentimiento,
             excluir=rejected  # Pasar lista de excluidas
         )
@@ -550,7 +551,7 @@ async def handle_user_turn(
     # 6. Generar respuesta con Groq
     system_prompt = get_system_prompt(enfoque, Q3)
     system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
-    system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque}, tema={session.slots.tipo_tarea}\n"
+    system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}\n"
     
     messages = [{"role": "system", "content": system_prompt}]
     if chat_history:
@@ -573,24 +574,20 @@ async def handle_user_turn(
     except Exception as e:
         logger.error(f"Error generation: {e}")
         reply = estrategia['template'].format(
-            tiempo=session.slots.tiempo_bloque, 
+            tiempo=session.slots.tiempo_bloque or 15, 
             tema=session.slots.tipo_tarea,
             cantidad="varios",
             paso_1="Paso 1", paso_2="Paso 2", paso_3="Paso 3",
             item_1="Item 1", item_2="Item 2", item_3="Item 3", 
             paso_1_detallado="Paso 1", paso_2_detallado="Paso 2", paso_3_detallado="Paso 3",
-            mitad_tiempo=int(session.slots.tiempo_bloque/2),
+            mitad_tiempo=int((session.slots.tiempo_bloque or 15)/2),
             accion_especifica="Comenzar"
         )
 
-    # Metadata con configuración del timer y estrategia
-    tiempo = session.slots.tiempo_bloque or 15
+    # Metadata response: SOLO enviamos la estrategia propuesta para validación.
+    # NO enviamos timer_config aquí. El timer se envía solo al aceptar.
     response_metadata = {
-        "strategy": estrategia["nombre"],
-        "timer_config": {
-            "duration_minutes": tiempo,
-            "label": estrategia["nombre"]
-        }
+        "strategy": estrategia["nombre"]
     }
 
     # Quick replies: ahora incluyen validación de estrategia
