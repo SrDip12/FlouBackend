@@ -242,7 +242,8 @@ def seleccionar_estrategia(
     tipo_tarea: str,
     fase: str,
     tiempo_disponible: int,
-    sentimiento: Optional[str] = None
+    sentimiento: Optional[str] = None,
+    excluir: Optional[List[str]] = None
 ) -> Dict:
     
     # 1. Seguridad: Ansiedad/Baja autoeficacia -> Prevención + Concreto
@@ -253,10 +254,16 @@ def seleccionar_estrategia(
     # Convertir nivel a símbolo para comparar con JSON
     nivel_sym = "↑" if nivel == "↑" or nivel == "ABSTRACTO" else "↓"
     
+    # Lista de estrategias excluidas (rechazadas previamente)
+    excluidas = excluir or []
+    
     candidates = []
 
     # Filtrar candidatos
     for strat in STRATEGIES:
+        # Excluir estrategias rechazadas
+        if strat.get("nombre") in excluidas:
+            continue
         # Check tiempo
         if tiempo_disponible < strat.get("tiempo_minimo", 0):
             continue
@@ -369,6 +376,76 @@ async def handle_user_turn(
     chat_history: Optional[List[Dict[str, str]]] = None
 ) -> Tuple[str, SessionStateSchema, Optional[List[Dict[str, Any]]], Dict[str, Any]]:
     
+    # --- Respuestas rápidas de bienvenida (reutilizables) ---
+    greeting_quick_replies = [
+        {"label": "😑 Aburrido/a", "value": "Estoy aburrido"},
+        {"label": "😤 Frustrado/a", "value": "Estoy frustrado"},
+        {"label": "😰 Ansioso/a", "value": "Estoy ansioso"},
+        {"label": "🌀 Distraído/a", "value": "Estoy distraído"},
+    ]
+
+    # 0. Comando especial: Auto-saludo desde el frontend
+    if user_text.strip() == "__greeting__":
+        session.metadata["greeted"] = True
+        return (
+            "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?",
+            session,
+            greeting_quick_replies,
+            {}
+        )
+
+    # 0b. Comando especial: Validación de estrategia - ACEPTAR
+    if user_text.strip() == "__accept_strategy__":
+        strategy_name = session.last_strategy or "Estrategia"
+        tiempo = session.slots.tiempo_bloque or 15
+        return (
+            f"¡Genial! 🎯 Vamos con **{strategy_name}**. Tu timer de {tiempo} minutos ya está corriendo. ¡Tú puedes! 💪",
+            session,
+            None,
+            {
+                "strategy": strategy_name,
+                "timer_config": {"duration_minutes": tiempo, "label": strategy_name}
+            }
+        )
+
+    # 0c. Comando especial: Validación de estrategia - RECHAZAR
+    if user_text.strip() == "__reject_strategy__":
+        # Incrementar contador de rechazos en metadata
+        rejections = session.metadata.get("strategy_rejections", 0) + 1
+        session.metadata["strategy_rejections"] = rejections
+        # Registrar estrategia rechazada para no repetirla
+        rejected_list = session.metadata.get("rejected_strategies", [])
+        if session.last_strategy and session.last_strategy not in rejected_list:
+            rejected_list.append(session.last_strategy)
+            session.metadata["rejected_strategies"] = rejected_list
+        
+        # Si ya se rechazaron 2+ estrategias → redirigir a ejercicio de relajación
+        if rejections >= 2:
+            session.metadata["strategy_rejections"] = 0  # Reiniciar contador
+            session.metadata["rejected_strategies"] = []  # Limpiar lista
+            return (
+                "Entiendo que no hemos encontrado la estrategia ideal todavía. 🧘 "
+                "A veces lo mejor es tomarse un momento para relajarse antes de volver al trabajo. "
+                "Te recomiendo probar un ejercicio de bienestar. ¡Después volvemos con todo! 💜",
+                session,
+                None,
+                {"redirect": "wellness"}
+            )
+        
+        # Si es el primer rechazo → reiniciar slots de estrategia y buscar otra
+        session.strategy_given = False
+        session.last_strategy = None
+        return (
+            "Sin problema, busquemos otra opción. 🔄 ¿Hay algo en particular que te gustaría probar diferente?",
+            session,
+            [
+                {"label": "🔄 Sorpréndeme", "value": "Quiero otra estrategia diferente"},
+                {"label": "⏱ Tengo poco tiempo", "value": "Dame algo rápido de hacer"},
+                {"label": "🧘 Algo relajado", "value": "Quiero algo tranquilo"}
+            ],
+            {}
+        )
+
     # 1. Crisis Check
     crisis = await detect_crisis(user_text)
     if crisis.get("is_crisis") and crisis.get("confidence", 0) > 0.7:
@@ -377,22 +454,12 @@ async def handle_user_turn(
 
     # 2. Greeting / Restart
     if "reiniciar" in user_text.lower():
-         session = SessionStateSchema(user_id=session.user_id, session_id=session.session_id) # Reset
-         return "¡Perfecto! Empecemos de nuevo. 🔄\n\n¿Cómo está tu motivación hoy?", session, [
-             {"label": "😑 Aburrido/a", "value": "Estoy aburrido"},
-             {"label": "😤 Frustrado/a", "value": "Estoy frustrado"},
-             {"label": "😰 Ansioso/a", "value": "Estoy ansioso"},
-             {"label": "🌀 Distraído/a", "value": "Estoy distraído"},
-         ], {}
+         session = SessionStateSchema(user_id=session.user_id, session_id=session.session_id)
+         return "¡Perfecto! Empecemos de nuevo. 🔄\n\n¿Cómo está tu motivación hoy?", session, greeting_quick_replies, {}
          
     if not chat_history and not session.metadata.get("greeted"):
         session.metadata["greeted"] = True
-        return "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?", session, [
-             {"label": "😑 Aburrido/a", "value": "Estoy aburrido"},
-             {"label": "😤 Frustrado/a", "value": "Estoy frustrado"},
-             {"label": "😰 Ansioso/a", "value": "Estoy ansioso"},
-             {"label": "🌀 Distraído/a", "value": "Estoy distraído"},
-        ], {}
+        return "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?", session, greeting_quick_replies, {}
 
     # 3. Onboarding Flow (Phases 1-5)
     # Extract slots
@@ -454,16 +521,24 @@ async def handle_user_turn(
         sentimiento=session.slots.sentimiento
     )
     
-    # Check if strategy worked (if user is returning)
-    if session.strategy_given:
-         # Logic to detect success/failure from user_text would go here
-         # For now, simplistic approach: generate next response assuming execution
-         pass
+    # Excluir estrategias previamente rechazadas para buscar alternativas
+    rejected = session.metadata.get("rejected_strategies", [])
+    if estrategia["nombre"] in rejected:
+        # Buscar otra estrategia que no haya sido rechazada
+        alt = seleccionar_estrategia(
+            enfoque=enfoque, nivel=Q3,
+            tipo_tarea=session.slots.tipo_tarea,
+            fase=session.slots.fase,
+            tiempo_disponible=session.slots.tiempo_bloque,
+            sentimiento=session.slots.sentimiento,
+            excluir=rejected  # Pasar lista de excluidas
+        )
+        estrategia = alt
     
     session.last_strategy = estrategia["nombre"]
     session.strategy_given = True
     
-    # 6. Generate Response with Groq
+    # 6. Generar respuesta con Groq
     system_prompt = get_system_prompt(enfoque, Q3)
     system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
     system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque}, tema={session.slots.tipo_tarea}\n"
@@ -472,7 +547,6 @@ async def handle_user_turn(
     if chat_history:
         for msg in chat_history[-6:]:
             role = "user" if msg.get("role") == "user" else "assistant"
-            # Handle list of parts or string content
             content = msg.get("parts", [""])[0] if isinstance(msg.get("content"), list) else msg.get("content", "")
             if not content and "text" in msg: content = msg["text"]
             messages.append({"role": role, "content": str(content)})
@@ -500,7 +574,20 @@ async def handle_user_turn(
             accion_especifica="Comenzar"
         )
 
-    return reply, session, [
-        {"label": "✅ Me sirvió", "value": "helpful"},
-        {"label": "❌ No me sirvió", "value": "not_helpful"}
-    ], {"strategy": estrategia["nombre"]}
+    # Metadata con configuración del timer y estrategia
+    tiempo = session.slots.tiempo_bloque or 15
+    response_metadata = {
+        "strategy": estrategia["nombre"],
+        "timer_config": {
+            "duration_minutes": tiempo,
+            "label": estrategia["nombre"]
+        }
+    }
+
+    # Quick replies: ahora incluyen validación de estrategia
+    quick_replies = [
+        {"label": "✅ Empezar", "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
+        {"label": "🔄 Otra opción", "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
+    ]
+
+    return reply, session, quick_replies, response_metadata

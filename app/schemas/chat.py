@@ -68,10 +68,15 @@ class MessageMetadata(BaseModel):
     """Metadata enriquecida de cada mensaje"""
     strategy_id: Optional[str] = None
     strategy_name: Optional[str] = None
+    strategy: Optional[str] = None  # Nombre de la estrategia seleccionada
     confidence_score: Optional[float] = None
     detected_slots: Optional[Dict[str, Any]] = None
     vibe: Optional[str] = None
     processing_time_ms: Optional[int] = None
+    # Configuración del timer visual (Pomodoro)
+    timer_config: Optional[Dict[str, Any]] = None  # {"duration_minutes": int, "label": str}
+    # Redirección a otra pantalla (ej: "wellness" tras 2 rechazos)
+    redirect: Optional[str] = None
 
 
 class ChatMessageRequest(BaseModel):

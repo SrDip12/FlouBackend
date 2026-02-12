@@ -370,3 +370,50 @@ async def submit_feedback(feedback: FeedbackRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al guardar feedback: {str(e)}"
         )
+
+
+# ============================================================================
+# ENDPOINT DE LIMPIAR CHAT
+# ============================================================================
+
+@router.delete("/sessions/{session_id}/clear")
+async def clear_chat_session(session_id: UUID):
+    """
+    Limpia todos los mensajes de una sesión y reinicia el estado de la IA.
+    El usuario podrá empezar la conversación de cero sin crear una nueva sesión.
+    """
+    supabase = get_supabase()
+    
+    try:
+        # Verificar que la sesión existe
+        session_result = supabase.table("chat_sessions")\
+            .select("id")\
+            .eq("id", str(session_id))\
+            .single()\
+            .execute()
+        
+        if not session_result.data:
+            raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        
+        # 1. Eliminar todos los mensajes de la sesión
+        supabase.table("chat_messages")\
+            .delete()\
+            .eq("session_id", str(session_id))\
+            .execute()
+        
+        # 2. Reiniciar el estado de la IA (current_state) a vacío
+        supabase.table("chat_sessions").update({
+            "current_state": {}
+        }).eq("id", str(session_id)).execute()
+        
+        logger.info(f"Sesión {session_id} limpiada exitosamente.")
+        return {"status": "ok", "message": "Chat limpiado exitosamente"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error limpiando sesión: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al limpiar sesión: {str(e)}"
+        )
