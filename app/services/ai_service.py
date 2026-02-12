@@ -501,7 +501,16 @@ async def handle_user_turn(
             {"label": "🔍 Revisando", "value": "Estoy revisando"}
         ], {}
 
-    # Phase 5: Tiempo (Optional, default 15)
+    # Phase 5: Tiempo disponible — preguntar cuánto tiempo tiene el usuario
+    if not session.slots.tiempo_bloque and session.iteration <= 7:
+        return "¡Ya casi! ⏱ ¿Cuánto tiempo tienes disponible ahora para trabajar con una estrategia?", session, [
+            {"label": "⚡ 10 min", "value": "Tengo 10 minutos"},
+            {"label": "⏰ 15 min", "value": "Tengo 15 minutos"},
+            {"label": "🕐 25 min", "value": "Tengo 25 minutos"},
+            {"label": "🕑 45 min", "value": "Tengo 45 minutos"},
+        ], {}
+
+    # Fallback: si no se extrajo tiempo después de varias iteraciones, usar 15 min
     if not session.slots.tiempo_bloque:
         session.slots.tiempo_bloque = 15
 
