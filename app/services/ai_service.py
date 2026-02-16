@@ -25,8 +25,126 @@ from app.schemas.chat import (
     SessionStateSchema, Slots, QuickReply
 )
 
+
+import random  # Importar random para variaciones
+
 # Configurar logging
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# DICCIONARIO I18N & MENSAJES DEL SISTEMA
+# ============================================================================
+I18N_MESSAGES = {
+    "es": {
+        "greeting": "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?",
+        "ask_sentiment": "Te escucho. 💜 Antes de empezar, cuéntame: ¿cómo te sientes ahora mismo? Así puedo orientarte mejor.",
+        "ask_time_variations": [
+            "¡Me encanta que tengas eso claro! ⏱ Para armar algo que realmente funcione, **¿cuánto tiempo tienes disponible ahora mismo?**",
+            "Entendido. 🕒 Para ajustar la estrategia a tu agenda, **¿de cuánto tiempo dispones en este momento?**",
+            "¡Bien! Vamos a aterrizar esto. ⏳ **¿Cuántos minutos tienes libres para dedicarle a esto ahora?**",
+            "Perfecto. Para ser realistas con el plan, **¿con cuánto tiempo cuentas ahora mismo?**"
+        ],
+        "ask_time_pre_timer": "¡Me parece excelente! 🚀 Una última cosa para configurar tu sesión: **¿Cuánto tiempo tienes disponible ahora mismo?**",
+        "crisis_msg": "Escucho que estás en un momento muy difícil. Por favor, busca apoyo inmediato: **llama al 4141** (línea gratuita y confidencial del MINSAL). No estás sola/o.",
+        "restart_msg": "¡Perfecto! Empecemos de nuevo. 🔄\n\n¿Cómo está tu motivación hoy?",
+        "strategy_accepted": "¡Genial! 🎯 Vamos con **{strategy_name}**. Tu timer de {tiempo} minutos ya está corriendo. ¡Tú puedes! 💪",
+        "strategy_rejected_retry": "Sin problema, busquemos otra opción. 🔄 ¿Hay algo en particular que te gustaría probar diferente?",
+        "strategy_rejected_max": "Entiendo que no hemos encontrado la estrategia ideal todavía. 🧘 A veces lo mejor es tomarse un momento para relajarse antes de volver al trabajo. Te recomiendo probar un ejercicio de bienestar. ¡Después volvemos con todo! 💜",
+        "fallback_error": "Disculpa, tuve un momento de desconexión. 🌀 ¿Puedes repetirme lo último?",
+        "quick_replies": {
+            "bored": "😑 Aburrido/a",
+            "frustrated": "😤 Frustrado/a",
+            "anxious": "😰 Ansioso/a",
+            "distracted": "🌀 Distraído/a",
+            "bored_val": "Me siento aburrido",
+            "frustrated_val": "Me siento frustrado",
+            "anxious_val": "Tengo ansiedad",
+            "distracted_val": "Estoy distraído",
+            "surprise_me": "🔄 Sorpréndeme",
+            "short_time": "⏱ Tengo poco tiempo",
+            "relaxed": "🧘 Algo relajado",
+            "surprise_val": "Quiero otra estrategia diferente",
+            "short_val": "Dame algo rápido de hacer",
+            "relaxed_val": "Quiero algo tranquilo",
+            "start": "✅ Empezar",
+            "other_option": "🔄 Otra opción",
+            "10_min": "⚡ 10 min",
+            "15_min": "⏰ 15 min",
+            "25_min": "🕐 25 min",
+            "45_min": "🕑 45 min",
+            "10_min_val": "Tengo 10 minutos",
+            "15_min_val": "Tengo 15 minutos",
+            "25_min_val": "Tengo 25 minutos",
+            "45_min_val": "Tengo 45 minutos"
+        }
+    },
+    "en": {
+        "greeting": "Hi, I'm Flou, your Task-Motivation assistant. 😊 To start, why don't you tell me how your motivation is today?",
+        "ask_sentiment": "I hear you. 💜 Before we start, tell me: how are you feeling right now? That helps me guide you better.",
+        "ask_time_variations": [
+            "Love that you're clear on that! ⏱ To build something that really works, **how much time do you have available right now?**",
+            "Got it. 🕒 To fit the strategy to your schedule, **how much time can you spare at this moment?**",
+            "Great! Let's make this actionable. ⏳ **How many minutes do you have free to dedicate to this now?**",
+            "Perfect. To be realistic with the plan, **how much time are you working with right now?**"
+        ],
+        "ask_time_pre_timer": "Sounds excellent! 🚀 One last thing to set up your session: **How much time do you have available right now?**",
+        "crisis_msg": "I hear you're going through a very difficult time. Please seek immediate support. You are not alone.",
+        "restart_msg": "Perfect! Let's start over. 🔄\n\nHow is your motivation today?",
+        "strategy_accepted": "Awesome! 🎯 Let's go with **{strategy_name}**. Your {tiempo} minute timer is running. You got this! 💪",
+        "strategy_rejected_retry": "No problem, let's find another option. 🔄 Is there anything specific you'd like to try differently?",
+        "strategy_rejected_max": "I understand we haven't found the ideal strategy yet. 🧘 Sometimes the best thing is to take a moment to relax before getting back to work. I recommend trying a wellness exercise. We'll come back stronger! 💜",
+        "fallback_error": "Sorry, I had a disconnection moment. 🌀 Can you repeat that last part?",
+        "quick_replies": {
+            "bored": "😑 Bored",
+            "frustrated": "😤 Frustrated",
+            "anxious": "😰 Anxious",
+            "distracted": "🌀 Distracted",
+            "bored_val": "I feel bored",
+            "frustrated_val": "I feel frustrated",
+            "anxious_val": "I feel anxious",
+            "distracted_val": "I am distracted",
+            "surprise_me": "🔄 Surprise me",
+            "short_time": "⏱ Short on time",
+            "relaxed": "🧘 Something relaxed",
+            "surprise_val": "I want a different strategy",
+            "short_val": "Give me something quick",
+            "relaxed_val": "I want something chill",
+            "start": "✅ Start",
+            "other_option": "🔄 Other option",
+            "10_min": "⚡ 10 min",
+            "15_min": "⏰ 15 min",
+            "25_min": "🕐 25 min",
+            "45_min": "🕑 45 min",
+            "10_min_val": "I have 10 minutes",
+            "15_min_val": "I have 15 minutes",
+            "25_min_val": "I have 25 minutes",
+            "45_min_val": "I have 45 minutes"
+        }
+    }
+}
+
+def get_message(key: str, locale: str = "es", **kwargs) -> str:
+    """Recupera un mensaje localizado. Soporta variaciones si el valor es una lista."""
+    lang_dict = I18N_MESSAGES.get(locale, I18N_MESSAGES["es"])
+    msg = lang_dict.get(key, I18N_MESSAGES["es"].get(key, ""))
+    
+    if isinstance(msg, list):
+        msg = random.choice(msg)
+    
+    if kwargs:
+        try:
+            return msg.format(**kwargs)
+        except:
+            return msg
+    return msg
+
+def get_quick_replies(key_list: List[str], locale: str = "es") -> List[Dict[str, str]]:
+    """Helper para construir quick replies localizadas."""
+    lang_qr = I18N_MESSAGES.get(locale, I18N_MESSAGES["es"])["quick_replies"]
+    # ... lógica específica según el tipo de QR ...
+    # Por simplicidad, devolveremos listas pre-construidas en el código principal
+    pass
+
 
 # Configurar Cliente Groq ASÍNCRONO para streaming y operaciones no-bloqueantes
 settings = get_settings()
@@ -551,19 +669,22 @@ async def handle_user_turn(
     5. GENERACIÓN LLM: Con i18n inyectado en el System Prompt.
     """
     
-    # --- Respuestas rápidas de bienvenida (reutilizables) ---
+    # --- Helper Quick Replies (Localizado) ---
+    msgs = I18N_MESSAGES.get(user_locale, I18N_MESSAGES["es"])
+    qr_texts = msgs["quick_replies"]
+
     greeting_quick_replies = [
-        {"label": "😑 Aburrido/a", "value": "Estoy aburrido"},
-        {"label": "😤 Frustrado/a", "value": "Estoy frustrado"},
-        {"label": "😰 Ansioso/a", "value": "Estoy ansioso"},
-        {"label": "🌀 Distraído/a", "value": "Estoy distraído"},
+        {"label": qr_texts["bored"], "value": qr_texts["bored_val"]},
+        {"label": qr_texts["frustrated"], "value": qr_texts["frustrated_val"]},
+        {"label": qr_texts["anxious"], "value": qr_texts["anxious_val"]},
+        {"label": qr_texts["distracted"], "value": qr_texts["distracted_val"]},
     ]
 
     # 0. Comando especial: Auto-saludo desde el frontend
     if user_text.strip() == "__greeting__":
         session.metadata["greeted"] = True
         return (
-            "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?",
+            get_message("greeting", user_locale),
             session,
             greeting_quick_replies,
             {}
@@ -574,7 +695,7 @@ async def handle_user_turn(
         strategy_name = session.last_strategy or "Estrategia"
         tiempo = session.slots.tiempo_bloque or 15
         return (
-            f"¡Genial! 🎯 Vamos con **{strategy_name}**. Tu timer de {tiempo} minutos ya está corriendo. ¡Tú puedes! 💪",
+            get_message("strategy_accepted", user_locale, strategy_name=strategy_name, tiempo=tiempo),
             session,
             None,
             {
@@ -599,9 +720,7 @@ async def handle_user_turn(
             session.metadata["strategy_rejections"] = 0  # Reiniciar contador
             session.metadata["rejected_strategies"] = []  # Limpiar lista
             return (
-                "Entiendo que no hemos encontrado la estrategia ideal todavía. 🧘 "
-                "A veces lo mejor es tomarse un momento para relajarse antes de volver al trabajo. "
-                "Te recomiendo probar un ejercicio de bienestar. ¡Después volvemos con todo! 💜",
+                get_message("strategy_rejected_max", user_locale),
                 session,
                 None,
                 {"redirect": "wellness"}
@@ -611,12 +730,12 @@ async def handle_user_turn(
         session.strategy_given = False
         session.last_strategy = None
         return (
-            "Sin problema, busquemos otra opción. 🔄 ¿Hay algo en particular que te gustaría probar diferente?",
+            get_message("strategy_rejected_retry", user_locale),
             session,
             [
-                {"label": "🔄 Sorpréndeme", "value": "Quiero otra estrategia diferente"},
-                {"label": "⏱ Tengo poco tiempo", "value": "Dame algo rápido de hacer"},
-                {"label": "🧘 Algo relajado", "value": "Quiero algo tranquilo"}
+                {"label": qr_texts["surprise_me"], "value": qr_texts["surprise_val"]},
+                {"label": qr_texts["short_time"], "value": qr_texts["short_val"]},
+                {"label": qr_texts["relaxed"], "value": qr_texts["relaxed_val"]}
             ],
             {}
         )
@@ -624,17 +743,17 @@ async def handle_user_turn(
     # 1. Crisis Check
     crisis = await detect_crisis(user_text)
     if crisis.get("is_crisis") and crisis.get("confidence", 0) > 0.7:
-        reply = "Escucho que estás en un momento muy difícil. Por favor, busca apoyo inmediato: **llama al 4141** (línea gratuita y confidencial del MINSAL). No estás sola/o."
+        reply = get_message("crisis_msg", user_locale)
         return reply, session, None, {}
 
     # 2. Greeting / Restart
-    if "reiniciar" in user_text.lower():
+    if "reiniciar" in user_text.lower() or "reset" in user_text.lower():
          session = SessionStateSchema(user_id=session.user_id, session_id=session.session_id)
-         return "¡Perfecto! Empecemos de nuevo. 🔄\n\n¿Cómo está tu motivación hoy?", session, greeting_quick_replies, {}
+         return get_message("restart_msg", user_locale), session, greeting_quick_replies, {}
          
     if not chat_history and not session.metadata.get("greeted"):
         session.metadata["greeted"] = True
-        return "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?", session, greeting_quick_replies, {}
+        return get_message("greeting", user_locale), session, greeting_quick_replies, {}
 
     # 3. Onboarding Flow (Phases 1-5)
     # Extract slots
@@ -644,12 +763,7 @@ async def handle_user_turn(
 
     # Phase 1: Sentimiento (único guardrail hardcodeado)
     if not session.slots.sentimiento and session.iteration <= 3:
-        return "Te escucho. 💜 Antes de empezar, cuéntame: ¿cómo te sientes ahora mismo? Así puedo orientarte mejor.", session, [
-             {"label": "😑 Aburrido/a", "value": "Me siento aburrido"},
-             {"label": "😤 Frustrado/a", "value": "Me siento frustrado"},
-             {"label": "😰 Ansioso/a", "value": "Tengo ansiedad"},
-             {"label": "🌀 Distraído/a", "value": "Estoy distraído"}
-        ], {}
+        return get_message("ask_sentiment", user_locale), session, greeting_quick_replies, {}
 
     # Determinar si hay suficiente contexto para estrategia
     tiene_sentimiento = bool(session.slots.sentimiento)
@@ -658,11 +772,11 @@ async def handle_user_turn(
 
     # Guardia de tiempo: solo si tiene tarea pero falta tiempo
     if tiene_sentimiento and tiene_tarea and not tiene_tiempo and not session.strategy_given:
-        return "¡Me encanta que tengas eso claro! ⏱ Para armar algo que realmente funcione, **¿cuánto tiempo tienes disponible ahora mismo?**", session, [
-            {"label": "⚡ 10 min", "value": "Tengo 10 minutos"},
-            {"label": "⏰ 15 min", "value": "Tengo 15 minutos"},
-            {"label": "🕐 25 min", "value": "Tengo 25 minutos"},
-            {"label": "🕑 45 min", "value": "Tengo 45 minutos"},
+        return get_message("ask_time_variations", user_locale), session, [
+            {"label": qr_texts["10_min"], "value": qr_texts["10_min_val"], "icon": "⚡", "color": "mint"},
+            {"label": qr_texts["15_min"], "value": qr_texts["15_min_val"], "icon": "⏰", "color": "sky"},
+            {"label": qr_texts["25_min"], "value": qr_texts["25_min_val"], "icon": "🕐", "color": "lavender"},
+            {"label": qr_texts["45_min"], "value": qr_texts["45_min_val"], "icon": "🕑", "color": "lavender"},
         ], {}
 
     # CASO A: Listo para estrategia
@@ -786,11 +900,16 @@ async def handle_user_turn_stream(
     })
     
     # --- Respuestas rápidas de bienvenida (reutilizables) ---
+    
+    # --- Helper Quick Replies (Localizado) ---
+    msgs = I18N_MESSAGES.get(user_locale, I18N_MESSAGES["es"])
+    qr_texts = msgs["quick_replies"]
+    
     greeting_quick_replies = [
-        {"label": "😑 Aburrido/a", "value": "Estoy aburrido"},
-        {"label": "😤 Frustrado/a", "value": "Estoy frustrado"},
-        {"label": "😰 Ansioso/a", "value": "Estoy ansioso"},
-        {"label": "🌀 Distraído/a", "value": "Estoy distraído"},
+        {"label": qr_texts["bored"], "value": qr_texts["bored_val"]},
+        {"label": qr_texts["frustrated"], "value": qr_texts["frustrated_val"]},
+        {"label": qr_texts["anxious"], "value": qr_texts["anxious_val"]},
+        {"label": qr_texts["distracted"], "value": qr_texts["distracted_val"]},
     ]
 
     # =====================================================================
@@ -801,7 +920,7 @@ async def handle_user_turn_stream(
     if user_text.strip() == "__greeting__":
         session.metadata["greeted"] = True
         yield sse_event("guardrail", {
-            "text": "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?",
+            "text": get_message("greeting", user_locale),
             "quick_replies": greeting_quick_replies
         })
         yield sse_event("session_state", session.model_dump(mode='json'))
@@ -825,12 +944,12 @@ async def handle_user_turn_stream(
         # Si NO hay tiempo definido, preguntar antes de lanzar timer
         if not tiempo or tiempo < 5:
             yield sse_event("guardrail", {
-                "text": "¡Me parece excelente! 🚀 Una última cosa para configurar tu sesión: **¿Cuánto tiempo tienes disponible ahora mismo?**",
+                "text": get_message("ask_time_pre_timer", user_locale),
                 "quick_replies": [
                     {"label": "15 min (Sprint)", "value": "__set_time_15__", "icon": "⚡", "color": "orange"},
                     {"label": "25 min (Pomodoro)", "value": "__set_time_25__", "icon": "🍅", "color": "red"},
                     {"label": "45 min (Foco)", "value": "__set_time_45__", "icon": "🧠", "color": "indigo"},
-                    {"label": "1 hora+", "value": "__set_time_60__", "icon": "⌛", "color": "purple"}
+                    {"label": "1h+", "value": "__set_time_60__", "icon": "⌛", "color": "purple"}
                 ]
             })
             yield sse_event("done", {})
@@ -838,7 +957,7 @@ async def handle_user_turn_stream(
 
         strategy_name = session.last_strategy or "Estrategia"
         yield sse_event("guardrail", {
-            "text": f"¡Genial! 🎯 Vamos con **{strategy_name}**. Tu timer de {tiempo} minutos ya está corriendo. ¡Tú puedes! 💪",
+            "text": get_message("strategy_accepted", user_locale, strategy_name=strategy_name, tiempo=tiempo),
             "quick_replies": None
         })
         yield sse_event("metadata", {
@@ -862,7 +981,7 @@ async def handle_user_turn_stream(
             session.metadata["strategy_rejections"] = 0
             session.metadata["rejected_strategies"] = []
             yield sse_event("guardrail", {
-                "text": "Entiendo que no hemos encontrado la estrategia ideal todavía. 🧘 A veces lo mejor es tomarse un momento para relajarse antes de volver al trabajo. Te recomiendo probar un ejercicio de bienestar. ¡Después volvemos con todo! 💜",
+                "text": get_message("strategy_rejected_max", user_locale),
                 "quick_replies": None
             })
             yield sse_event("metadata", {"redirect": "wellness"})
@@ -870,11 +989,11 @@ async def handle_user_turn_stream(
             session.strategy_given = False
             session.last_strategy = None
             yield sse_event("guardrail", {
-                "text": "Sin problema, busquemos otra opción. 🔄 ¿Hay algo en particular que te gustaría probar diferente?",
+                "text": get_message("strategy_rejected_retry", user_locale),
                 "quick_replies": [
-                    {"label": "🔄 Sorpréndeme", "value": "Quiero otra estrategia diferente"},
-                    {"label": "⏱ Tengo poco tiempo", "value": "Dame algo rápido de hacer"},
-                    {"label": "🧘 Algo relajado", "value": "Quiero algo tranquilo"}
+                    {"label": qr_texts["surprise_me"], "value": qr_texts["surprise_val"]},
+                    {"label": qr_texts["short_time"], "value": qr_texts["short_val"]},
+                    {"label": qr_texts["relaxed"], "value": qr_texts["relaxed_val"]}
                 ]
             })
         yield sse_event("session_state", session.model_dump(mode='json'))
@@ -885,7 +1004,7 @@ async def handle_user_turn_stream(
     crisis = await detect_crisis(user_text)
     if crisis.get("is_crisis") and crisis.get("confidence", 0) > 0.7:
         yield sse_event("guardrail", {
-            "text": "Escucho que estás en un momento muy difícil. Por favor, busca apoyo inmediato: **llama al 4141** (línea gratuita y confidencial del MINSAL). No estás sola/o.",
+            "text": get_message("crisis_msg", user_locale),
             "quick_replies": None,
             "is_crisis": True
         })
@@ -894,10 +1013,10 @@ async def handle_user_turn_stream(
         return
     
     # Guardrail: Reiniciar sesión
-    if "reiniciar" in user_text.lower():
+    if "reiniciar" in user_text.lower() or "reset" in user_text.lower():
         session = SessionStateSchema(user_id=session.user_id, session_id=session.session_id)
         yield sse_event("guardrail", {
-            "text": "¡Perfecto! Empecemos de nuevo. 🔄\n\n¿Cómo está tu motivación hoy?",
+            "text": get_message("restart_msg", user_locale),
             "quick_replies": greeting_quick_replies
         })
         yield sse_event("session_state", session.model_dump(mode='json'))
@@ -908,7 +1027,7 @@ async def handle_user_turn_stream(
     if not chat_history and not session.metadata.get("greeted"):
         session.metadata["greeted"] = True
         yield sse_event("guardrail", {
-            "text": "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?",
+            "text": get_message("greeting", user_locale),
             "quick_replies": greeting_quick_replies
         })
         yield sse_event("session_state", session.model_dump(mode='json'))
@@ -925,7 +1044,7 @@ async def handle_user_turn_stream(
     # Solo Phase 1 (sentimiento) es guardrail hardcodeado
     if not session.slots.sentimiento and session.iteration <= 3:
         yield sse_event("guardrail", {
-            "text": "Te escucho. 💜 Antes de empezar, cuéntame: ¿cómo te sientes ahora mismo? Así puedo orientarte mejor.",
+            "text": get_message("ask_sentiment", user_locale),
             "quick_replies": greeting_quick_replies
         })
         yield sse_event("session_state", session.model_dump(mode='json'))
@@ -943,14 +1062,16 @@ async def handle_user_turn_stream(
 
     # ─── GUARDIA DE TIEMPO: Solo si ya tenemos tarea pero falta tiempo ───
     # Así la pregunta de tiempo aparece EN CONTEXTO, justo antes de proponer
+    # ─── GUARDIA DE TIEMPO: Solo si ya tenemos tarea pero falta tiempo ───
+    # Así la pregunta de tiempo aparece EN CONTEXTO, justo antes de proponer
     if tiene_sentimiento and tiene_tarea and not tiene_tiempo and not session.strategy_given:
         yield sse_event("guardrail", {
-            "text": "¡Me encanta que tengas eso claro! ⏱ Para armar algo que realmente funcione, **¿cuánto tiempo tienes disponible ahora mismo?**",
+            "text": get_message("ask_time_variations", user_locale),
             "quick_replies": [
-                {"label": "⚡ 10 min", "value": "Tengo 10 minutos", "icon": "⚡", "color": "mint"},
-                {"label": "⏰ 15 min", "value": "Tengo 15 minutos", "icon": "⏰", "color": "sky"},
-                {"label": "🕐 25 min", "value": "Tengo 25 minutos", "icon": "🕐", "color": "lavender"},
-                {"label": "🕑 45 min", "value": "Tengo 45 minutos", "icon": "🕑", "color": "lavender"},
+                {"label": qr_texts["10_min"], "value": qr_texts["10_min_val"], "icon": "⚡", "color": "mint"},
+                {"label": qr_texts["15_min"], "value": qr_texts["15_min_val"], "icon": "⏰", "color": "sky"},
+                {"label": qr_texts["25_min"], "value": qr_texts["25_min_val"], "icon": "🕐", "color": "lavender"},
+                {"label": qr_texts["45_min"], "value": qr_texts["45_min_val"], "icon": "🕑", "color": "lavender"},
             ]
         })
         yield sse_event("session_state", session.model_dump(mode='json'))
@@ -1025,10 +1146,13 @@ async def handle_user_turn_stream(
             full_reply = fallback
             yield sse_event("token", {"text": fallback})
 
+            full_reply = fallback
+            yield sse_event("token", {"text": fallback})
+
         # Emitir quick replies de validación
         yield sse_event("quick_reply", [
-            {"label": "✅ Empezar", "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
-            {"label": "🔄 Otra opción", "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
+            {"label": qr_texts["start"], "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
+            {"label": qr_texts["other_option"], "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
         ])
         yield sse_event("metadata", {
             "strategy": estrategia["nombre"],
@@ -1076,7 +1200,7 @@ async def handle_user_turn_stream(
                 yield sse_event("token", {"text": delta.content})
     except Exception as e:
         logger.error(f"Error en streaming LLM (conversación libre): {e}")
-        fallback = "Disculpa, tuve un momento de desconexión. 🌀 ¿Puedes repetirme lo último?"
+        fallback = get_message("fallback_error", user_locale)
         full_reply = fallback
         yield sse_event("token", {"text": fallback})
 
