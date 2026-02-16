@@ -4,7 +4,9 @@ from app.schemas.wellness import (
     CheckInResponse,
     EnergyRequest,
     ExerciseResponse,
-    MotivationResponse
+    MotivationResponse,
+    ExerciseCompletionRequest,
+    ExerciseCompletionResponse
 )
 from app.services.wellness_service import WellnessService
 from app.core.i18n import detect_user_language

@@ -9,8 +9,6 @@ from app.schemas.wellness import (
     EnergyRequest, 
     ExerciseResponse,
     MotivationResponse,
-    ExerciseResponse,
-    MotivationResponse,
     EnergyLevel,
     ExerciseCompletionRequest,
     ExerciseCompletionResponse
