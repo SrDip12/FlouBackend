@@ -642,167 +642,110 @@ async def handle_user_turn(
     session.slots = new_slots
     session.iteration += 1
 
-    # Phase 1: Sentimiento
+    # Phase 1: Sentimiento (único guardrail hardcodeado)
     if not session.slots.sentimiento and session.iteration <= 3:
-        return "Para poder ayudarte mejor, ¿cómo te sientes ahora mismo con tu trabajo?", session, [
+        return "Te escucho. 💜 Antes de empezar, cuéntame: ¿cómo te sientes ahora mismo? Así puedo orientarte mejor.", session, [
              {"label": "😑 Aburrido/a", "value": "Me siento aburrido"},
              {"label": "😤 Frustrado/a", "value": "Me siento frustrado"},
              {"label": "😰 Ansioso/a", "value": "Tengo ansiedad"},
              {"label": "🌀 Distraído/a", "value": "Estoy distraído"}
         ], {}
 
-    # Phase 2: Tarea
-    if session.slots.sentimiento and not session.slots.tipo_tarea and session.iteration <= 4:
-         return "Entiendo. Para poder orientarte mejor, cuéntame: ¿qué tipo de trabajo necesitas hacer?", session, [
-            {"label": "📝 Escribir ensayo", "value": "Tengo que escribir un ensayo"},
-            {"label": "📖 Leer/Estudiar", "value": "Tengo que leer"},
-            {"label": "🧮 Resolver ejercicios", "value": "Tengo que resolver ejercicios"},
-            {"label": "💻 Programar", "value": "Tengo que programar"}
-         ], {}
+    # Determinar si hay suficiente contexto para estrategia
+    tiene_sentimiento = bool(session.slots.sentimiento)
+    tiene_tarea = bool(session.slots.tipo_tarea)
+    tiene_tiempo = bool(session.slots.tiempo_bloque)
 
-    # Phase 3: Plazo
-    if session.slots.sentimiento and session.slots.tipo_tarea and not session.slots.plazo and session.iteration <= 5:
-        return "Entiendo. ¿Para cuándo necesitas tenerlo listo?", session, [
-            {"label": "🔥 Hoy mismo", "value": "Es para hoy"},
-            {"label": "⏰ Mañana", "value": "Es para mañana"},
-            {"label": "📅 Esta semana", "value": "Es para esta semana"},
-        ], {}
-
-    # Phase 4: Fase
-    if session.slots.sentimiento and session.slots.tipo_tarea and session.slots.plazo and not session.slots.fase and session.iteration <= 6:
-        return "Muy bien. ¿En qué etapa del trabajo estás ahora?", session, [
-            {"label": "💡 Empezando (Ideas)", "value": "Estoy en la fase de ideacion"},
-            {"label": "📝 Ejecutando", "value": "Estoy ejecutando"},
-            {"label": "🔍 Revisando", "value": "Estoy revisando"}
-        ], {}
-
-    # Phase 5: Tiempo disponible — OBLIGATORIO, sin límite de iteración
-    # NUNCA avanzar a estrategia sin saber cuánto tiempo tiene el usuario
-    if not session.slots.tiempo_bloque:
-        return "¡Ya casi! ⏱ **¿Cuánto tiempo tienes disponible ahora?** Esto me ayuda a elegir la mejor estrategia para ti.", session, [
+    # Guardia de tiempo: solo si tiene tarea pero falta tiempo
+    if tiene_sentimiento and tiene_tarea and not tiene_tiempo and not session.strategy_given:
+        return "¡Me encanta que tengas eso claro! ⏱ Para armar algo que realmente funcione, **¿cuánto tiempo tienes disponible ahora mismo?**", session, [
             {"label": "⚡ 10 min", "value": "Tengo 10 minutos"},
             {"label": "⏰ 15 min", "value": "Tengo 15 minutos"},
             {"label": "🕐 25 min", "value": "Tengo 25 minutos"},
             {"label": "🕑 45 min", "value": "Tengo 45 minutos"},
         ], {}
 
-    # 4. Inferir Q2/Q3/Enfoque
-    Q2, Q3, enfoque = infer_q2_q3(session.slots)
-    session.metadata["Q2"] = Q2
-    session.metadata["Q3"] = Q3
-    session.metadata["enfoque"] = enfoque
-    
-    # 5. Seleccionar Estrategia
-    estrategia = seleccionar_estrategia(
-        enfoque=enfoque,
-        nivel=Q3,
-        tipo_tarea=session.slots.tipo_tarea,
-        fase=session.slots.fase,
-        tiempo_disponible=session.slots.tiempo_bloque or 15, # Fallback solo para selección
-        sentimiento=session.slots.sentimiento
-    )
-    
-    # Excluir estrategias previamente rechazadas para buscar alternativas
-    rejected = session.metadata.get("rejected_strategies", [])
-    if estrategia["nombre"] in rejected:
-        # Buscar otra estrategia que no haya sido rechazada
-        alt = seleccionar_estrategia(
+    # CASO A: Listo para estrategia
+    listo_para_estrategia = tiene_sentimiento and tiene_tarea and tiene_tiempo
+    if listo_para_estrategia and not session.strategy_given:
+        Q2, Q3, enfoque = infer_q2_q3(session.slots)
+        session.metadata["Q2"] = Q2
+        session.metadata["Q3"] = Q3
+        session.metadata["enfoque"] = enfoque
+        
+        estrategia = seleccionar_estrategia(
             enfoque=enfoque, nivel=Q3,
             tipo_tarea=session.slots.tipo_tarea,
             fase=session.slots.fase,
             tiempo_disponible=session.slots.tiempo_bloque or 15,
-            sentimiento=session.slots.sentimiento,
-            excluir=rejected  # Pasar lista de excluidas
+            sentimiento=session.slots.sentimiento
         )
-        estrategia = alt
-    
-    session.last_strategy = estrategia["nombre"]
-    session.strategy_given = True
-    
-    # 6. Generar respuesta con Groq (con i18n + hora actual en el prompt)
+        
+        rejected = session.metadata.get("rejected_strategies", [])
+        if estrategia["nombre"] in rejected:
+            estrategia = seleccionar_estrategia(
+                enfoque=enfoque, nivel=Q3,
+                tipo_tarea=session.slots.tipo_tarea,
+                fase=session.slots.fase,
+                tiempo_disponible=session.slots.tiempo_bloque or 15,
+                sentimiento=session.slots.sentimiento,
+                excluir=rejected
+            )
+        
+        session.last_strategy = estrategia["nombre"]
+        session.strategy_given = True
+        
+        hora_actual = datetime.now().strftime("%H:%M")
+        system_prompt = get_system_prompt(enfoque, Q3, user_locale=user_locale, current_time=hora_actual)
+        system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
+        system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}\n"
+        
+        messages = _build_llm_messages(system_prompt, chat_history, user_text)
+        try:
+            completion = await client.chat.completions.create(
+                model=MODEL_NAME, messages=messages, temperature=0.7, max_tokens=300
+            )
+            reply = completion.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Error generation: {e}")
+            reply = estrategia['template'].format(
+                tiempo=session.slots.tiempo_bloque or 15, tema=session.slots.tipo_tarea,
+                cantidad="varios", paso_1="Paso 1", paso_2="Paso 2", paso_3="Paso 3",
+                item_1="Item 1", item_2="Item 2", item_3="Item 3",
+                paso_1_detallado="Paso 1", paso_2_detallado="Paso 2", paso_3_detallado="Paso 3",
+                mitad_tiempo=int((session.slots.tiempo_bloque or 15)/2), accion_especifica="Comenzar"
+            )
+
+        quick_replies = [
+            {"label": "✅ Empezar", "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
+            {"label": "🔄 Otra opción", "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
+        ]
+        return reply, session, quick_replies, {"strategy": estrategia["nombre"]}
+
+    # CASO B: Conversación libre con LLM (falta contexto o post-estrategia)
     hora_actual = datetime.now().strftime("%H:%M")
-    system_prompt = get_system_prompt(
-        enfoque, Q3,
-        user_locale=user_locale,
-        current_time=hora_actual,
-    )
-    system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
-    system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}\n"
-    
-    messages = [{"role": "system", "content": system_prompt}]
-    if chat_history:
-        for msg in chat_history[-6:]:
-            role = "user" if msg.get("role") == "user" else "assistant"
-            content = msg.get("parts", [""])[0] if isinstance(msg.get("content"), list) else msg.get("content", "")
-            if not content and "text" in msg: content = msg["text"]
-            messages.append({"role": role, "content": str(content)})
-    
-    messages.append({"role": "user", "content": user_text})
-    
+    if session.strategy_given:
+        enfoque_actual = session.metadata.get("enfoque", "Promoción")
+        nivel_actual = session.metadata.get("Q3", "Concreto")
+        system_prompt = get_system_prompt(enfoque_actual, nivel_actual, user_locale=user_locale, current_time=hora_actual)
+        if session.last_strategy:
+            system_prompt += f"\nESTRATEGIA ACTIVA: {session.last_strategy}\nEl usuario ya tiene una estrategia. Responde sus dudas o ajusta según lo que diga.\n"
+    else:
+        system_prompt = _build_free_conversation_prompt(session, user_locale, hora_actual)
+
+    messages = _build_llm_messages(system_prompt, chat_history, user_text)
     try:
-        # Llamada ASÍNCRONA al LLM (sin streaming para el endpoint clásico)
         completion = await client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=300
+            model=MODEL_NAME, messages=messages, temperature=0.7, max_tokens=300
         )
         reply = completion.choices[0].message.content
     except Exception as e:
-        logger.error(f"Error generation: {e}")
-        reply = estrategia['template'].format(
-            tiempo=session.slots.tiempo_bloque or 15, 
-            tema=session.slots.tipo_tarea,
-            cantidad="varios",
-            paso_1="Paso 1", paso_2="Paso 2", paso_3="Paso 3",
-            item_1="Item 1", item_2="Item 2", item_3="Item 3", 
-            paso_1_detallado="Paso 1", paso_2_detallado="Paso 2", paso_3_detallado="Paso 3",
-            mitad_tiempo=int((session.slots.tiempo_bloque or 15)/2),
-            accion_especifica="Comenzar"
-        )
+        logger.error(f"Error en conversación libre: {e}")
+        reply = "Disculpa, tuve un momento de desconexión. 🌀 ¿Puedes repetirme lo último?"
 
-    # Metadata response: SOLO enviamos la estrategia propuesta para validación.
-    # NO enviamos timer_config aquí. El timer se envía solo al aceptar.
-    response_metadata = {
-        "strategy": estrategia["nombre"]
-    }
-
-    # Quick replies: ahora incluyen validación de estrategia
-    quick_replies = [
-        {"label": "✅ Empezar", "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
-        {"label": "🔄 Otra opción", "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
-    ]
-
-    return reply, session, quick_replies, response_metadata
+    return reply, session, None, {}
 
 
-    # =========================================================================================
-    # 4. REGLAS DE ORO (FORMATO Y LÓGICA)
-    # =========================================================================================
-    reglas_oro = f"""
-1. **EMPATÍA PRIMERO (CRÍTICO):**
-   - Si el usuario dice estar "agobiado", "estresado", "cansado" o negativo -> **JAMÁS empieces con "Perfecto", "Genial" o "Excelente".** Eso se siente robótico e insensible.
-   - En su lugar, usa: "Te entiendo", "Qué pesado", "Respiremos", "Es normal sentirse así".
-   - Valida la emoción antes de proponer solución.
-
-2. **REGLA DEL TIEMPO (OBLIGATORIA):**
-   - Si el usuario pide ayuda para estudiar/trabajar pero NO ha dicho por cuánto tiempo:
-   - **TU ÚNICA MISIÓN ES PREGUNTAR: "¿Cuánto tiempo tienes disponible?"**
-   - NO propongas estrategias específicas ni inicies timers hasta saber el tiempo.
-   - NO inventes el tiempo (nunca asumas 25 min si no te lo dijeron).
-   
-   Ejemplo INCORRECTO: User: "Ayúdame" -> AI: "Perfecto, haremos 25 min." (MAL)
-   Ejemplo CORRECTO: User: "Ayúdame" -> AI: "Claro, vamos a darle. ¿Cuánto tiempo tienes para esto?" (BIEN)
-
-3. **FORMATO:**
-   - Respuestas CORTAS (máx 2 párrafos).
-   - Usa **negritas** para conceptos clave.
-   - Listas con bullets si hay pasos.
-
-4. **COMANDOS OCULTOS (VISIBLES SOLO PARA TI):**
-   - Si el usuario te da un tiempo (ej: "30 min"), añade AL FINAL: `__timer_config:{{"duration_minutes": 30}}__`.
-   - Si acuerdan una estrategia, añade: `__strategy_confirmed__`.
-    """
 # ============================================================================
 # GENERADOR ASÍNCRONO DE STREAMING (SSE)
 # ============================================================================
@@ -973,26 +916,36 @@ async def handle_user_turn_stream(
         return
 
     # =====================================================================
-    # FASE 2: EXTRACCIÓN DE SLOTS + ONBOARDING (respuestas determinísticas)
+    # FASE 2: EXTRACCIÓN DE SLOTS (siempre se hace)
     # =====================================================================
     new_slots = await extract_slots_with_llm(user_text, session.slots)
     session.slots = new_slots
     session.iteration += 1
 
-    # Fases de onboarding: preguntas guiadas (sin LLM)
-    onboarding_response = _check_onboarding_phase(session)
-    if onboarding_response:
-        text, qr = onboarding_response
-        yield sse_event("guardrail", {"text": text, "quick_replies": qr})
+    # Solo Phase 1 (sentimiento) es guardrail hardcodeado
+    if not session.slots.sentimiento and session.iteration <= 3:
+        yield sse_event("guardrail", {
+            "text": "Te escucho. 💜 Antes de empezar, cuéntame: ¿cómo te sientes ahora mismo? Así puedo orientarte mejor.",
+            "quick_replies": greeting_quick_replies
+        })
         yield sse_event("session_state", session.model_dump(mode='json'))
         yield sse_event("done", {})
         return
 
-    # GUARDIA OBLIGATORIA: Si NO hay tiempo definido, SIEMPRE preguntar.
-    # Nunca avanzar a estrategia sin saber cuánto tiempo tiene el usuario.
-    if not session.slots.tiempo_bloque:
+    # =====================================================================
+    # FASE 3: DECISIÓN — ¿Conversación libre o estrategia?
+    # =====================================================================
+    # Determinar si tenemos suficiente contexto para proponer una estrategia
+    tiene_sentimiento = bool(session.slots.sentimiento)
+    tiene_tarea = bool(session.slots.tipo_tarea)
+    tiene_tiempo = bool(session.slots.tiempo_bloque)
+    listo_para_estrategia = tiene_sentimiento and tiene_tarea and tiene_tiempo
+
+    # ─── GUARDIA DE TIEMPO: Solo si ya tenemos tarea pero falta tiempo ───
+    # Así la pregunta de tiempo aparece EN CONTEXTO, justo antes de proponer
+    if tiene_sentimiento and tiene_tarea and not tiene_tiempo and not session.strategy_given:
         yield sse_event("guardrail", {
-            "text": "¡Ya casi! ⏱ Para configurar tu sesión, **¿cuánto tiempo tienes disponible ahora mismo?**",
+            "text": "¡Me encanta que tengas eso claro! ⏱ Para armar algo que realmente funcione, **¿cuánto tiempo tienes disponible ahora mismo?**",
             "quick_replies": [
                 {"label": "⚡ 10 min", "value": "Tengo 10 minutos", "icon": "⚡", "color": "mint"},
                 {"label": "⏰ 15 min", "value": "Tengo 15 minutos", "icon": "⏰", "color": "sky"},
@@ -1005,47 +958,146 @@ async def handle_user_turn_stream(
         return
 
     # =====================================================================
-    # FASE 3: INFERENCIA + SELECCIÓN DE ESTRATEGIA
+    # CASO A: LISTO PARA ESTRATEGIA → Pipeline completo
     # =====================================================================
-    Q2, Q3, enfoque = infer_q2_q3(session.slots)
-    session.metadata["Q2"] = Q2
-    session.metadata["Q3"] = Q3
-    session.metadata["enfoque"] = enfoque
+    if listo_para_estrategia and not session.strategy_given:
+        Q2, Q3, enfoque = infer_q2_q3(session.slots)
+        session.metadata["Q2"] = Q2
+        session.metadata["Q3"] = Q3
+        session.metadata["enfoque"] = enfoque
 
-    estrategia = seleccionar_estrategia(
-        enfoque=enfoque, nivel=Q3,
-        tipo_tarea=session.slots.tipo_tarea,
-        fase=session.slots.fase,
-        tiempo_disponible=session.slots.tiempo_bloque or 15,
-        sentimiento=session.slots.sentimiento
-    )
-
-    rejected = session.metadata.get("rejected_strategies", [])
-    if estrategia["nombre"] in rejected:
         estrategia = seleccionar_estrategia(
             enfoque=enfoque, nivel=Q3,
             tipo_tarea=session.slots.tipo_tarea,
             fase=session.slots.fase,
             tiempo_disponible=session.slots.tiempo_bloque or 15,
-            sentimiento=session.slots.sentimiento,
-            excluir=rejected
+            sentimiento=session.slots.sentimiento
         )
 
-    session.last_strategy = estrategia["nombre"]
-    session.strategy_given = True
+        rejected = session.metadata.get("rejected_strategies", [])
+        if estrategia["nombre"] in rejected:
+            estrategia = seleccionar_estrategia(
+                enfoque=enfoque, nivel=Q3,
+                tipo_tarea=session.slots.tipo_tarea,
+                fase=session.slots.fase,
+                tiempo_disponible=session.slots.tiempo_bloque or 15,
+                sentimiento=session.slots.sentimiento,
+                excluir=rejected
+            )
+
+        session.last_strategy = estrategia["nombre"]
+        session.strategy_given = True
+
+        # System prompt CON estrategia
+        hora_actual = datetime.now().strftime("%H:%M")
+        system_prompt = get_system_prompt(
+            enfoque, Q3,
+            user_locale=user_locale,
+            current_time=hora_actual,
+        )
+        system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
+        system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}\n"
+
+        # Streamear tokens del LLM con estrategia (inline)
+        messages = _build_llm_messages(system_prompt, chat_history, user_text)
+        full_reply = ""
+        try:
+            stream = await client.chat.completions.create(
+                model=MODEL_NAME, messages=messages,
+                temperature=0.7, max_tokens=350, stream=True
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta and delta.content:
+                    full_reply += delta.content
+                    yield sse_event("token", {"text": delta.content})
+        except Exception as e:
+            logger.error(f"Error en streaming LLM (estrategia): {e}")
+            fallback = estrategia['template'].format(
+                tiempo=session.slots.tiempo_bloque or 15,
+                tema=session.slots.tipo_tarea or "tu tarea",
+                cantidad="varios", paso_1="Paso 1", paso_2="Paso 2", paso_3="Paso 3",
+                item_1="Item 1", item_2="Item 2", item_3="Item 3",
+                paso_1_detallado="Paso 1", paso_2_detallado="Paso 2", paso_3_detallado="Paso 3",
+                mitad_tiempo=int((session.slots.tiempo_bloque or 15) / 2),
+                accion_especifica="Comenzar"
+            )
+            full_reply = fallback
+            yield sse_event("token", {"text": fallback})
+
+        # Emitir quick replies de validación
+        yield sse_event("quick_reply", [
+            {"label": "✅ Empezar", "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
+            {"label": "🔄 Otra opción", "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
+        ])
+        yield sse_event("metadata", {
+            "strategy": estrategia["nombre"],
+            "full_reply": full_reply
+        })
+        yield sse_event("session_state", session.model_dump(mode='json'))
+        yield sse_event("done", {})
+        return
 
     # =====================================================================
-    # FASE 4: STREAMING DE TOKENS DEL LLM (Groq con stream=True)
+    # CASO B: CONVERSACIÓN LIBRE CON LLM (falta contexto o post-estrategia)
     # =====================================================================
+    # El LLM tiene una conversación natural, descubriendo orgánicamente
+    # qué necesita el usuario. No es un formulario — es coaching real.
+
     hora_actual = datetime.now().strftime("%H:%M")
-    system_prompt = get_system_prompt(
-        enfoque, Q3,
-        user_locale=user_locale,
-        current_time=hora_actual,
-    )
-    system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
-    system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}\n"
 
+    # Si ya dio estrategia (follow-up), usar system prompt normal
+    if session.strategy_given:
+        enfoque_actual = session.metadata.get("enfoque", "Promoción")
+        nivel_actual = session.metadata.get("Q3", "Concreto")
+        system_prompt = get_system_prompt(
+            enfoque_actual, nivel_actual,
+            user_locale=user_locale,
+            current_time=hora_actual,
+        )
+        if session.last_strategy:
+            system_prompt += f"\nESTRATEGIA ACTIVA: {session.last_strategy}\nEl usuario ya tiene una estrategia. Responde sus dudas o ajusta según lo que diga.\n"
+    else:
+        # Conversación libre PRE-estrategia
+        system_prompt = _build_free_conversation_prompt(session, user_locale, hora_actual)
+
+    # Streamear respuesta del LLM (inline — conversación libre)
+    messages = _build_llm_messages(system_prompt, chat_history, user_text)
+    full_reply = ""
+    try:
+        stream = await client.chat.completions.create(
+            model=MODEL_NAME, messages=messages,
+            temperature=0.7, max_tokens=350, stream=True
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta and delta.content:
+                full_reply += delta.content
+                yield sse_event("token", {"text": delta.content})
+    except Exception as e:
+        logger.error(f"Error en streaming LLM (conversación libre): {e}")
+        fallback = "Disculpa, tuve un momento de desconexión. 🌀 ¿Puedes repetirme lo último?"
+        full_reply = fallback
+        yield sse_event("token", {"text": fallback})
+
+    yield sse_event("metadata", {"full_reply": full_reply})
+    yield sse_event("session_state", session.model_dump(mode='json'))
+    yield sse_event("done", {})
+
+
+# ============================================================================
+# HELPER: CONSTRUIR MENSAJES PARA LLM (Reutilizable)
+# ============================================================================
+
+def _build_llm_messages(
+    system_prompt: str,
+    chat_history: Optional[List[Dict[str, str]]],
+    user_text: str
+) -> List[Dict[str, str]]:
+    """
+    Construye la lista de mensajes (system + historial + user) para enviar al LLM.
+    Se usa tanto en el CASO A (estrategia) como en el CASO B (conversación libre).
+    """
     messages = [{"role": "system", "content": system_prompt}]
     if chat_history:
         for msg in chat_history[-6:]:
@@ -1055,65 +1107,121 @@ async def handle_user_turn_stream(
                 content = msg["text"]
             messages.append({"role": role, "content": str(content)})
     messages.append({"role": "user", "content": user_text})
+    return messages
 
-    full_reply = ""  # Acumulador para guardar el texto completo en BD
-    try:
-        # Invocación con stream=True: el LLM envía tokens incrementales
-        stream = await client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=300,
-            stream=True  # ← STREAMING ACTIVADO
-        )
-        
-        # Iterar sobre cada chunk del stream asincrónicamente
-        async for chunk in stream:
-            delta = chunk.choices[0].delta
-            if delta and delta.content:
-                token = delta.content
-                full_reply += token
-                # Emitir cada token individual al frontend
-                yield sse_event("token", {"text": token})
-                
-    except Exception as e:
-        logger.error(f"Error en streaming LLM: {e}")
-        # Fallback: usar template de estrategia si el LLM falla
-        fallback_reply = estrategia['template'].format(
-            tiempo=session.slots.tiempo_bloque or 15,
-            tema=session.slots.tipo_tarea,
-            cantidad="varios",
-            paso_1="Paso 1", paso_2="Paso 2", paso_3="Paso 3",
-            item_1="Item 1", item_2="Item 2", item_3="Item 3",
-            paso_1_detallado="Paso 1", paso_2_detallado="Paso 2", paso_3_detallado="Paso 3",
-            mitad_tiempo=int((session.slots.tiempo_bloque or 15) / 2),
-            accion_especifica="Comenzar"
-        )
-        full_reply = fallback_reply
-        yield sse_event("token", {"text": fallback_reply})
-        yield sse_event("error", {"message": str(e)})
 
-    # =====================================================================
-    # FASE 5: EMISIÓN DE METADATOS POST-STREAM
-    # =====================================================================
+# ============================================================================
+# HELPER: PROMPT DE CONVERSACIÓN LIBRE (Pre-estrategia)
+# ============================================================================
+
+def _build_free_conversation_prompt(
+    session: SessionStateSchema,
+    user_locale: str,
+    current_time: str
+) -> str:
+    """
+    Construye un system prompt para conversación libre ANTES de proponer una estrategia.
     
-    # Emitir quick replies de validación de estrategia
-    yield sse_event("quick_reply", [
-        {"label": "✅ Empezar", "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
-        {"label": "🔄 Otra opción", "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
-    ])
+    El LLM sabe:
+    - Qué información ya tiene del usuario (slots llenos)
+    - Qué le falta descubrir (slots vacíos)
+    - Que debe ser conversacional, NO un formulario
+    - Que debe inferir especulativamente en vez de interrogar
     
-    # Emitir metadata de la estrategia seleccionada
-    yield sse_event("metadata", {
-        "strategy": estrategia["nombre"],
-        "full_reply": full_reply  # Texto completo para persistencia en BD
-    })
+    Esto reemplaza las fases hardcodeadas 2-4 del onboarding rígido.
+    """
+    slots = session.slots
     
-    # Emitir el estado actualizado de la sesión
-    yield sse_event("session_state", session.model_dump(mode='json'))
+    # Construir resumen de lo que sabemos
+    info_conocida = []
+    info_faltante = []
     
-    # Señal de fin del stream
-    yield sse_event("done", {})
+    if slots.sentimiento:
+        info_conocida.append(f"• Se siente: {slots.sentimiento}")
+    
+    if slots.tipo_tarea:
+        info_conocida.append(f"• Tipo de tarea: {slots.tipo_tarea}")
+    else:
+        info_faltante.append("tipo de tarea (qué necesita hacer)")
+    
+    if slots.plazo:
+        info_conocida.append(f"• Plazo: {slots.plazo}")
+    
+    if slots.fase:
+        info_conocida.append(f"• Fase: {slots.fase}")
+    
+    if slots.tiempo_bloque:
+        info_conocida.append(f"• Tiempo disponible: {slots.tiempo_bloque} min")
+    
+    conocido_str = "\n".join(info_conocida) if info_conocida else "Aún no tenemos información específica."
+    faltante_str = ", ".join(info_faltante) if info_faltante else "Nada crítico falta."
+    
+    if user_locale == "en":
+        return f"""You are **Flou**, a warm and empathetic productivity coach.
+You're having a natural conversation with someone who feels {slots.sentimiento or "something they haven't shared yet"}.
+
+CURRENT TIME: {current_time}
+
+WHAT YOU KNOW ABOUT THE USER:
+{conocido_str}
+
+WHAT YOU STILL NEED TO DISCOVER NATURALLY:
+{faltante_str}
+
+YOUR MISSION:
+- Have a REAL conversation. You are NOT a form. You are a coach.
+- If you know their emotional state, VALIDATE it first. Show genuine empathy.
+- Then naturally explore what they're working on through conversation.
+- Use speculative inference: "Sounds like you need to dive into some writing?" instead of "What type of task is this?"
+- Be warm, specific, and actionable.
+- Keep responses under 80 words. Be concise but human.
+- Use **bold** for key ideas.
+- Use emojis naturally (max 2-3).
+- NEVER ask more than ONE question per message.
+- NEVER say things like "I need more information" or "Can you tell me about..."
+- NEVER output JSON or mention slots.
+
+EXAMPLES OF GOOD RESPONSES:
+✅ "Being frustrated with a bug is the worst 😤 Tell me more — what are you working on? Sometimes just talking it through helps."
+✅ "I get it, the pressure of a deadline can be paralyzing. What's the assignment about? Maybe we can break it into something manageable."
+✅ "Sounds like you've got an essay to tackle! Are you staring at a blank page or do you have some ideas already?"
+"""
+    else:
+        return f"""Eres **Flou**, una coach de productividad empática y cercana.
+Estás teniendo una conversación natural con alguien que se siente {slots.sentimiento or "algo que aún no ha compartido"}.
+
+HORA ACTUAL: {current_time}
+
+LO QUE SABES DEL USUARIO:
+{conocido_str}
+
+LO QUE AÚN NECESITAS DESCUBRIR NATURALMENTE:
+{faltante_str}
+
+TU MISIÓN:
+- Tener una conversación REAL. NO eres un formulario. Eres una coach.
+- Si sabes cómo se siente, VALIDA su emoción primero. Muestra empatía genuina.
+- Luego explora naturalmente en qué está trabajando a través de la conversación.
+- Usa inferencia especulativa: "Suena como que necesitas ponerte con algo de escritura, ¿no?" en vez de "¿Qué tipo de tarea es?"
+- Sé cálida, específica y orientada a la acción.
+- Máximo 80 palabras. Sé concisa pero humana.
+- Usa **negritas** para ideas clave.
+- Usa emojis de forma natural (máximo 2-3).
+- NUNCA hagas más de UNA pregunta por mensaje.
+- NUNCA digas cosas como "necesito más información" o "cuéntame sobre..."
+- NUNCA generes JSON ni menciones slots.
+- Usa español neutro internacional. Sin regionalismos.
+
+IMPORTANTE — EMPATÍA REAL:
+- Si el usuario expresa agobio, estrés o negatividad: **PROHIBIDO** empezar con "Perfecto", "Genial" o "Excelente".
+- Usa: "Te entiendo", "Qué pesado", "Es normal", "Vamos paso a paso".
+- Valida SIEMPRE la emoción antes de proponer nada.
+
+EJEMPLOS DE BUENAS RESPUESTAS:
+✅ "La frustración con un bug es de lo peor 😤 Cuéntame más — ¿en qué estás trabajando? A veces solo hablarlo ayuda."
+✅ "Entiendo, la presión de un plazo puede paralizar. ¿De qué se trata lo que tienes que hacer? Quizás podamos partirlo en algo manejable."
+✅ "¡Suena como que tienes un ensayo entre manos! ¿Estás frente a la hoja en blanco o ya tienes algunas ideas? 📝"
+"""
 
 
 # ============================================================================
