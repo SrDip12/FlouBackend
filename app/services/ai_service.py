@@ -171,15 +171,28 @@ async def extract_slots_with_llm(free_text: str, current_slots: Slots) -> Slots:
         return extract_slots_heuristic(free_text, current_slots)
 
     try:
-        sys_prompt = """Extrae como JSON los campos del texto del usuario:
+        sys_prompt = """Extrae como JSON los campos del texto del usuario.
+Reglas Flexibles:
+1. 'tipo_tarea': Mapea lo que el usuario quiere hacer a la categoría más cercana:
+   - 'coding': programar, hacer una ia, código, desarrollo, bug, script.
+   - 'ensayo': escribir, redacción, texto largo.
+   - 'resumen': estudiar, leer, sintetizar.
+   - 'presentacion': diapositivas, ppt, slide.
+   - 'resolver_problemas': ejercicios, matemáticas, lógica.
+   - 'proyecto': avanzar proyecto, trabajo grupal.
+2. 'sentimiento': Infiere la emoción subyacente (baja motivación, ansiedad, aburrimiento).
+3. 'tiempo_bloque': Si el usuario menciona una duración (ej: "tengo 20 min"), extráela.
+4. TYPOS: El usuario puede tener errores (ej: "necesitohacer"). Separa mentalmente las palabras y extrae la intención.
+
+Campos validos:
 - sentimiento: aburrimiento|frustracion|ansiedad_error|dispersion_rumiacion|baja_autoeficacia|otro
-- sentimiento_otro: texto libre si es "otro"
-- tipo_tarea: ensayo|esquema|borrador|lectura_tecnica|resumen|resolver_problemas|protocolo_lab|mcq|presentacion|coding|bugfix|proofreading
+- sentimiento_otro: texto libre
+- tipo_tarea: ensayo|esquema|borrador|lectura_tecnica|resumen|resolver_problemas|protocolo_lab|mcq|presentacion|coding|bugfix|proofreading|proyecto|otro
 - plazo: hoy|<24h|esta_semana|>1_semana
 - fase: ideacion|planificacion|ejecucion|revision
-- tiempo_bloque: 10|12|15|20|25|30|45|60|90
+- tiempo_bloque: entero (minutos)
 
-Si un campo no aparece y no está en los slots actuales, usa null. Responde SOLO JSON."""
+Responde SOLO JSON. Si un campo no está claro, usa null."""
 
         user_prompt = f"""Texto: "{free_text}"
 Slots actuales: {current_slots.model_dump_json()}"""
@@ -816,10 +829,35 @@ async def handle_user_turn_stream(
         yield sse_event("done", {})
         return
     
+    # Guardrail: Comandos de tiempo (__set_time_XX__) -> Auto-activa estrategia
+    if user_text.strip().startswith("__set_time_") and user_text.strip().endswith("__"):
+        try:
+            val = user_text.strip().replace("__set_time_", "").replace("__", "")
+            session.slots.tiempo_bloque = int(val)
+            # Proceder automáticamente a lanzar el timer
+            user_text = "__accept_strategy__"
+        except:
+            pass
+
     # Guardrail: Comando __accept_strategy__
     if user_text.strip() == "__accept_strategy__":
+        tiempo = session.slots.tiempo_bloque
+
+        # Si NO hay tiempo definido, preguntar antes de lanzar timer
+        if not tiempo or tiempo < 5:
+            yield sse_event("guardrail", {
+                "text": "¡Me parece excelente! 🚀 Una última cosa para configurar tu sesión: **¿Cuánto tiempo tienes disponible ahora mismo?**",
+                "quick_replies": [
+                    {"label": "15 min (Sprint)", "value": "__set_time_15__", "icon": "⚡", "color": "orange"},
+                    {"label": "25 min (Pomodoro)", "value": "__set_time_25__", "icon": "🍅", "color": "red"},
+                    {"label": "45 min (Foco)", "value": "__set_time_45__", "icon": "🧠", "color": "indigo"},
+                    {"label": "1 hora+", "value": "__set_time_60__", "icon": "⌛", "color": "purple"}
+                ]
+            })
+            yield sse_event("done", {})
+            return
+
         strategy_name = session.last_strategy or "Estrategia"
-        tiempo = session.slots.tiempo_bloque or 15
         yield sse_event("guardrail", {
             "text": f"¡Genial! 🎯 Vamos con **{strategy_name}**. Tu timer de {tiempo} minutos ya está corriendo. ¡Tú puedes! 💪",
             "quick_replies": None
