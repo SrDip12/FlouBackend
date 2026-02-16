@@ -85,13 +85,15 @@ class ChatMessageRequest(BaseModel):
     user_id: UUID
     content: str = Field(..., min_length=1, max_length=2000)
     context: Optional[str] = None  # Contexto adicional (ej: código que está debuggeando)
+    user_locale: str = Field(default="es", description="Idioma del usuario: 'es' o 'en'")
     
     class Config:
         json_schema_extra = {
             "example": {
                 "user_id": "123e4567-e89b-12d3-a456-426614174000",
                 "content": "Estoy atascado con un bug y no sé por dónde empezar",
-                "context": "Debugging en Python"
+                "context": "Debugging en Python",
+                "user_locale": "es"
             }
         }
 
@@ -152,12 +154,26 @@ class ChatHistoryResponse(BaseModel):
 
 
 # ============================================================================
-# SCHEMAS PARA STREAMING (Nuevo)
+# SCHEMAS PARA STREAMING (SSE - Server Sent Events)
 # ============================================================================
 
 class StreamChunk(BaseModel):
-    """Chunk de respuesta en modo streaming"""
-    type: Literal["start", "content", "quick_reply", "metadata", "end"]
+    """
+    Chunk individual enviado al frontend via SSE (Server Sent Events).
+    Tipos:
+      - 'start': Señal de inicio del stream, data contiene session_id.
+      - 'token': Token de texto individual del LLM.
+      - 'quick_reply': Lista de quick replies al finalizar generación.
+      - 'metadata': Metadatos de la estrategia y decisión de la IA.
+      - 'guardrail': Respuesta inmediata desde regex/crisis (sin LLM).
+      - 'session_state': Estado actualizado de la sesión (para persistencia).
+      - 'done': Señal de fin del stream.
+      - 'error': Error durante el procesamiento.
+    """
+    event: Literal[
+        "start", "token", "quick_reply", "metadata",
+        "guardrail", "session_state", "done", "error"
+    ]
     data: Any
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 

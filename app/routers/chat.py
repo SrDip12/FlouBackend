@@ -19,7 +19,7 @@ from app.schemas.chat import (
     FeedbackRequest,
     StreamChunk
 )
-from app.services.ai_service import handle_user_turn
+from app.services.ai_service import handle_user_turn, handle_user_turn_stream
 from app.core.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -214,7 +214,8 @@ async def send_message(message_data: ChatMessageRequest):
             session=session_state,
             user_text=message_data.content,
             context=message_data.context or "",
-            chat_history=chat_history
+            chat_history=chat_history,
+            user_locale=message_data.user_locale
         )
         
         # 6. Persistir el NUEVO estado de la sesión
@@ -259,6 +260,181 @@ async def send_message(message_data: ChatMessageRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al procesar mensaje: {str(e)}"
+        )
+
+
+# ============================================================================
+# ENDPOINT DE STREAMING (SSE - Server Sent Events)
+# ============================================================================
+
+@router.post("/messages/stream")
+async def send_message_stream(message_data: ChatMessageRequest):
+    """
+    Endpoint de streaming para el chatbot.
+    Retorna un StreamingResponse con eventos SSE (Server Sent Events).
+    
+    El frontend consume esto con EventSource o fetch + ReadableStream.
+    Cada línea tiene el formato: "data: {json}\n\n"
+    
+    Eventos posibles:
+    - start: Inicio del stream con session_id.
+    - guardrail: Respuesta inmediata (regex/crisis/onboarding), SIN LLM.
+    - token: Token de texto individual del LLM (streaming real).
+    - quick_reply: Botones de respuesta rápida.
+    - metadata: Estrategia seleccionada y datos de decisión.
+    - session_state: Estado actualizado para persistencia.
+    - done: Fin del stream.
+    - error: Error durante el procesamiento.
+    """
+    supabase = get_supabase()
+    
+    try:
+        # 1. Obtener o crear sesión (mismo flujo que el endpoint clásico)
+        if message_data.session_id:
+            session_result = supabase.table("chat_sessions")\
+                .select("*")\
+                .eq("id", str(message_data.session_id))\
+                .single()\
+                .execute()
+            
+            if not session_result.data:
+                raise HTTPException(status_code=404, detail="Sesión no encontrada")
+            
+            session_id = message_data.session_id
+        else:
+            new_session = supabase.table("chat_sessions").insert({
+                "user_id": str(message_data.user_id),
+                "title": "Nueva conversación",
+                "is_active": True
+            }).execute()
+            session_id = new_session.data[0]["id"]
+            # Crear un resultado simulado para el estado
+            session_result = type('obj', (object,), {'data': new_session.data[0]})()
+        
+        # 2. Guardar mensaje del usuario
+        supabase.table("chat_messages").insert({
+            "session_id": str(session_id),
+            "sender": "user",
+            "content": message_data.content
+        }).execute()
+        
+        # 3. Obtener historial de la conversación
+        history_result = supabase.table("chat_messages")\
+            .select("sender, content")\
+            .eq("session_id", str(session_id))\
+            .order("created_at", desc=True)\
+            .limit(10)\
+            .execute()
+        
+        chat_history = []
+        for msg in reversed(history_result.data):
+            chat_history.append({
+                "role": msg["sender"],
+                "parts": [msg["content"]]
+            })
+        
+        # 4. Preparar estado de sesión
+        current_state_json = session_result.data.get("current_state", {})
+        if current_state_json and isinstance(current_state_json, dict) and "slots" in current_state_json:
+            try:
+                session_state = SessionStateSchema(**current_state_json)
+                session_state.session_id = session_id
+                session_state.user_id = message_data.user_id
+            except Exception as e:
+                logger.warning(f"Error parseando estado de sesión: {e}, reiniciando.")
+                session_state = SessionStateSchema(
+                    session_id=session_id,
+                    user_id=message_data.user_id,
+                    slots=Slots()
+                )
+        else:
+            session_state = SessionStateSchema(
+                session_id=session_id,
+                user_id=message_data.user_id,
+                slots=Slots()
+            )
+        
+        # 5. Crear wrapper del generador que persiste datos al finalizar
+        async def stream_and_persist():
+            """
+            Wrapper que consume el generador de streaming y al detectar
+            eventos de metadata/session_state, persiste en BD.
+            """
+            full_reply = ""
+            updated_state = None
+            metadata = {}
+            
+            async for sse_chunk in handle_user_turn_stream(
+                session=session_state,
+                user_text=message_data.content,
+                context=message_data.context or "",
+                chat_history=chat_history,
+                user_locale=message_data.user_locale
+            ):
+                # Emitir cada chunk al frontend inmediatamente
+                yield sse_chunk
+                
+                # Parsear el chunk para capturar datos de persistencia
+                try:
+                    # Extraer el JSON del formato SSE "data: {json}\n\n"
+                    if sse_chunk.startswith("data: "):
+                        parsed = json.loads(sse_chunk[6:].strip())
+                        event_type = parsed.get("event")
+                        event_data = parsed.get("data", {})
+                        
+                        # Acumular texto completo del guardrail
+                        if event_type == "guardrail":
+                            full_reply = event_data.get("text", "")
+                        
+                        # Acumular metadata
+                        if event_type == "metadata":
+                            metadata = event_data
+                            if "full_reply" in event_data:
+                                full_reply = event_data["full_reply"]
+                        
+                        # Capturar estado actualizado
+                        if event_type == "session_state":
+                            updated_state = event_data
+                except Exception:
+                    pass  # No interrumpir el stream por errores de parsing
+            
+            # --- Persistencia post-stream ---
+            try:
+                # Guardar estado de sesión actualizado
+                if updated_state:
+                    supabase.table("chat_sessions").update({
+                        "current_state": updated_state
+                    }).eq("id", str(session_id)).execute()
+                
+                # Guardar respuesta de la IA en BD
+                if full_reply:
+                    supabase.table("chat_messages").insert({
+                        "session_id": str(session_id),
+                        "sender": "ai",
+                        "content": full_reply,
+                        "metadata": metadata
+                    }).execute()
+            except Exception as e:
+                logger.error(f"Error persistiendo post-stream: {e}")
+        
+        # 6. Retornar StreamingResponse con content-type para SSE
+        return StreamingResponse(
+            stream_and_persist(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Desactivar buffering en nginx/proxy
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error en streaming: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al procesar mensaje en streaming: {str(e)}"
         )
 
 

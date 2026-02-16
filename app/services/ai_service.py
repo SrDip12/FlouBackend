@@ -3,18 +3,23 @@
 """
 Servicio de IA para Flou - Tutor Metamotivacional (Ported to Groq)
 Basado en Miele & Scholer (2016) y el modelo de Task-Motivation Fit.
-Restaura la lógica original determinística y heurística.
+
+ARQUITECTURA REFACTORIZADA:
+- Cliente AsyncGroq para operaciones no-bloqueantes.
+- Streaming de tokens via generador asíncrono (SSE).
+- Regex como Guardrail al inicio del pipeline (pre-procesamiento).
+- Soporte i18n: el locale se inyecta en el System Prompt.
 """
 
 import logging
 import re
 import json
 import time
-from typing import Optional, Dict, List, Tuple, Any
+from typing import Optional, Dict, List, Tuple, Any, AsyncGenerator
 from datetime import datetime
 from pathlib import Path
 
-from groq import Groq
+from groq import AsyncGroq
 from app.core.config import get_settings
 from app.schemas.chat import (
     SessionStateSchema, Slots, QuickReply
@@ -23,12 +28,12 @@ from app.schemas.chat import (
 # Configurar logging
 logger = logging.getLogger(__name__)
 
-# Configurar Cliente Groq
+# Configurar Cliente Groq ASÍNCRONO para streaming y operaciones no-bloqueantes
 settings = get_settings()
 try:
-    client = Groq(api_key=settings.GROQ_API_KEY)
+    client = AsyncGroq(api_key=settings.GROQ_API_KEY)
 except Exception as e:
-    logger.error(f"Error inicializando cliente Groq: {e}")
+    logger.error(f"Error inicializando cliente AsyncGroq: {e}")
     client = None
 
 MODEL_NAME = 'llama-3.3-70b-versatile'
@@ -179,7 +184,7 @@ Si un campo no aparece y no está en los slots actuales, usa null. Responde SOLO
         user_prompt = f"""Texto: "{free_text}"
 Slots actuales: {current_slots.model_dump_json()}"""
 
-        completion = client.chat.completions.create(
+        completion = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": sys_prompt},
@@ -329,7 +334,7 @@ async def detect_crisis(text: str) -> Dict[str, Any]:
         return {"is_crisis": True, "confidence": 0.5, "reason": "Regex match (no LLM)"}
 
     try:
-        completion = client.chat.completions.create(
+        completion = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": "Analiza si el mensaje implica riesgo suicida REAL. Responde JSON: {\"is_crisis\": bool, \"confidence\": float}"},
@@ -343,26 +348,158 @@ async def detect_crisis(text: str) -> Dict[str, Any]:
         return {"is_crisis": True, "confidence": 0.5, "reason": "Regex match (LLM failed)"}
 
 # ============================================================================
-# SYSTEM PROMPT BUILDER
+# SYSTEM PROMPT BUILDER — INFERENCIA ESPECULATIVA
 # ============================================================================
 
-def get_system_prompt(enfoque: str, nivel: str) -> str:
-    modo = "ENTUSIASTA (Velocidad, Cantidad, Logros)" if enfoque == "promocion_eager" else "VIGILANTE (Precisión, Calidad, Evitar Errores)"
-    nivel_txt = "ABSTRACTO (El Por Qué, Propósito)" if nivel == "↑" else "CONCRETO (El Cómo, Pasos, Detalles)"
-    
-    return f"""Eres Flou, experta en Metamotivación.
-    
-TU MODO ACTUAL: {modo}
-TU NIVEL DE DETALLE: {nivel_txt}
+def get_system_prompt(
+    enfoque: str,
+    nivel: str,
+    user_locale: str = "es",
+    user_name: str = "",
+    current_time: str = "",
+) -> str:
+    """
+    Construye el System Prompt con personalidad empática e inferencia especulativa.
 
-SI ES MODO ENTUSIASTA: Usa tono enérgico, enfócate en avanzar rápido, ignora errores.
-SI ES MODO VIGILANTE: Usa tono calmado, enfócate en revisar y verificar.
+    CAMBIO DE PARADIGMA (vs. versión anterior):
+    - Antes: "Formulario policial" → 5 preguntas secuenciales obligatorias.
+    - Ahora: Coach empático que INFIERE datos y propone de inmediato.
+      Si le falta info, propone una estrategia razonable y pregunta
+      "¿te sirve esto?" en lugar de interrogar.
 
-REGLAS:
-1. Valida la emoción del usuario en 1 frase empática.
-2. Da UNA sola acción específica.
-3. Sé natural, chilena, usa emojis.
-4. Mantén respuesta bajo 90 palabras.
+    Args:
+        enfoque: Resultado de Q2 (promocion_eager / prevencion_vigilant)
+        nivel: Resultado de Q3 (↑ abstracto / ↓ concreto)
+        user_locale: Idioma del usuario ('es' | 'en')
+        user_name: Nombre del usuario (opcional, para personalizar el saludo)
+        current_time: Hora actual en formato legible (ej: "14:30")
+    """
+    # --- Traducir la orientación motivacional a lenguaje natural ---
+    # (Task-Motivation Fit camuflado: la IA actúa pero no verbaliza la teoría)
+    if enfoque == "promocion_eager":
+        orientacion_interna = (
+            "El usuario está en MODO PROMOCIÓN-ENTUSIASTA. "
+            "Priorizas velocidad, avanzar rápido, logros tangibles. "
+            "Minimizas perfeccionismo. Tono enérgico, directo, motivador."
+        )
+    else:
+        orientacion_interna = (
+            "El usuario está en MODO PREVENCIÓN-VIGILANTE. "
+            "Priorizas calidad, revisión cuidadosa, evitar errores. "
+            "Tono calmado, estructurado, tranquilizador."
+        )
+
+    if nivel == "↑":
+        nivel_interno = (
+            "NIVEL ABSTRACTO: Conecta la tarea con su propósito, el 'por qué' importa. "
+            "Motiva con visión y significado."
+        )
+    else:
+        nivel_interno = (
+            "NIVEL CONCRETO: El usuario necesita el 'cómo'. Pasos claros, "
+            "detalles prácticos, micro-acciones inmediatas."
+        )
+
+    # --- Bloque de personalidad y tono según idioma ---
+    if user_locale == "en":
+        personalidad = f"""You are **Flou**, a warm and empathetic productivity coach.
+You specialize in helping people start, focus, and follow through — especially when motivation is low.
+
+YOUR VOICE:
+- Professional yet warm. Think: supportive friend who happens to know psychology.
+- Use emojis naturally (not excessively). Max 2-3 per message.
+- Never sound robotic, scripted, or like a chatbot. Be human.
+- Address the user{f' as {user_name}' if user_name else ''} with warmth.
+{f'- Current time is {current_time}. Use this to contextualize your advice (morning energy, afternoon slump, late-night crunch).' if current_time else ''}
+
+LANGUAGE: ALWAYS respond in English."""
+    else:
+        personalidad = f"""Eres **Flou**, una coach de productividad empática y cercana.
+Te especializas en ayudar a las personas a comenzar, enfocarse y terminar — sobre todo cuando la motivación es baja.
+
+TU VOZ:
+- Habla de forma natural y cálida, como alguien que sabe de psicología y quiere ayudar. Nada de sonar como bot.
+- Usa español neutro e internacional. Evita regionalismos, jerga o modismos locales.
+- Usa emojis de forma orgánica (no abuses). Máximo 2-3 por mensaje.
+- {f'Al usuario le dices {user_name}.' if user_name else 'Habla con calidez.'}
+{f'- La hora actual es {current_time}. Úsala para contextualizar (energía matutina, bajón de tarde, sesión nocturna de estudio).' if current_time else ''}
+
+IDIOMA: Responde SIEMPRE en Español neutro, comprensible en cualquier país hispanohablante."""
+
+    # --- Bloque de inferencia especulativa ---
+    if user_locale == "en":
+        inferencia = """SPECULATIVE INFERENCE (CRITICAL):
+- NEVER stop the conversation to ask for trivial data. If the user says "I have an exam", ASSUME it's soon and offer immediate help.
+- If you're missing critical info, PROPOSE a reasonable strategy and ask "does this work for you?" instead of interrogating.
+- You can infer: task type from context, urgency from language, emotional state from tone.
+- Examples of WHAT NOT TO DO:
+  ❌ "What type of task is this?"
+  ❌ "When is your deadline?"
+  ❌ "On a scale of 1-5, how stressed are you?"
+- Examples of WHAT TO DO:
+  ✅ "Sounds like you need to tackle some writing — here's a quick approach: [strategy]. Does this feel right?"
+  ✅ "I can tell this is stressing you out. Let's start with just 10 minutes of focused work, then reassess."
+  ✅ "Exam coming up? Here's a study sprint that works well under pressure..."
+- Only ask ONE follow-up question at most, and only if genuinely ambiguous."""
+    else:
+        inferencia = """INFERENCIA ESPECULATIVA (CRÍTICO):
+- NUNCA detengas la conversación para pedir datos triviales. Si el usuario dice "tengo examen", ASUME que es pronto y ofrece ayuda inmediata.
+- Si te faltan datos críticos, PROPÓN una estrategia razonable y pregunta "¿te funciona esto?" en vez de interrogar.
+- Puedes inferir: tipo de tarea por el contexto, urgencia por las palabras, estado emocional por el tono.
+- Ejemplos de lo que NO debes hacer:
+  ❌ "¿Qué tipo de tarea es?"
+  ❌ "¿Para cuándo es tu plazo?"
+  ❌ "Del 1 al 5, ¿qué tan estresado/a estás?"
+- Ejemplos de lo que SÍ debes hacer:
+  ✅ "Parece que necesitas ponerte a escribir — mira esta técnica: [estrategia]. ¿Te funciona?"
+  ✅ "Noto que esto te está generando estrés. Empecemos con solo 10 minutos enfocados y vemos cómo va."
+  ✅ "¿Examen pronto? Tengo un sprint de estudio que funciona muy bien bajo presión..."
+- Si algo es genuinamente ambiguo, pregunta UNA sola cosa. Máximo una pregunta de seguimiento."""
+
+    # --- Bloque de metodología (camuflada) ---
+    if user_locale == "en":
+        metodologia = f"""INTERNAL COMPASS (do NOT mention this to the user):
+{orientacion_interna}
+{nivel_interno}
+
+Use this compass to calibrate your tone, your recommendations, and how much detail you give.
+The user should never hear terms like "Promotion Focus" or "Prevention Focus". Just ACT accordingly."""
+    else:
+        metodologia = f"""BRÚJULA INTERNA (NO menciones esto al usuario):
+{orientacion_interna}
+{nivel_interno}
+
+Usa esta brújula para calibrar tu tono, tus recomendaciones y cuánto detalle das.
+El usuario NUNCA debe escuchar términos como "Enfoque de Promoción" o "Prevención". Simplemente ACTÚA acorde."""
+
+    # --- Reglas de formato ---
+    if user_locale == "en":
+        formato = """RESPONSE RULES:
+1. Validate the user's emotion in ONE empathetic phrase (never skip this).
+2. Provide ONE specific, actionable recommendation — not a list of 5 options.
+3. If the user is just chatting (no clear task), be conversational and empathetic. Don't force a strategy.
+4. Keep responses under 100 words. Be concise. No walls of text.
+5. Use **bold** for key actions or strategy names.
+6. When you propose a strategy, frame it as an invitation: "Want to try...?" or "How about we...?"
+7. NEVER output JSON, NEVER mention slots, NEVER say "I need more information"."""
+    else:
+        formato = """REGLAS DE RESPUESTA:
+1. Valida la emoción del usuario en UNA frase empática (nunca te la saltes).
+2. Da UNA sola recomendación específica y accionable — no una lista de 5 opciones.
+3. Si el usuario solo conversa (sin tarea clara), sé conversacional y empática. No fuerces una estrategia.
+4. Mantén respuestas bajo 100 palabras. Sé concisa. Nada de muros de texto.
+5. Usa **negrita** para acciones clave o nombres de estrategias.
+6. Cuando propones una estrategia, formúlala como invitación: "¿Te gustaría probar...?" o "¿Qué tal si...?"
+7. NUNCA respondas JSON, NUNCA menciones slots, NUNCA digas "necesito más información"."""
+
+    # --- Ensamblaje final del prompt ---
+    return f"""{personalidad}
+
+{inferencia}
+
+{metodologia}
+
+{formato}
 """
 
 # ============================================================================
@@ -373,8 +510,20 @@ async def handle_user_turn(
     session: SessionStateSchema, 
     user_text: str, 
     context: str = "", 
-    chat_history: Optional[List[Dict[str, str]]] = None
+    chat_history: Optional[List[Dict[str, str]]] = None,
+    user_locale: str = "es"
 ) -> Tuple[str, SessionStateSchema, Optional[List[Dict[str, Any]]], Dict[str, Any]]:
+    """
+    Orquestador principal del turno de conversación.
+    
+    FLUJO REFACTORIZADO (Regex como Guardrail):
+    1. PRE-PROCESAMIENTO: Regex detecta comandos (__greeting__, __accept__, __reject__)
+       y crisis. Si hay match → respuesta inmediata, NO se llama al LLM.
+    2. EXTRACCIÓN: Si no hay guardrail → extraer slots con LLM.
+    3. ONBOARDING: Fases guiadas para recopilar datos.
+    4. INFERENCIA: Q2/Q3 + selección de estrategia.
+    5. GENERACIÓN LLM: Con i18n inyectado en el System Prompt.
+    """
     
     # --- Respuestas rápidas de bienvenida (reutilizables) ---
     greeting_quick_replies = [
@@ -548,8 +697,13 @@ async def handle_user_turn(
     session.last_strategy = estrategia["nombre"]
     session.strategy_given = True
     
-    # 6. Generar respuesta con Groq
-    system_prompt = get_system_prompt(enfoque, Q3)
+    # 6. Generar respuesta con Groq (con i18n + hora actual en el prompt)
+    hora_actual = datetime.now().strftime("%H:%M")
+    system_prompt = get_system_prompt(
+        enfoque, Q3,
+        user_locale=user_locale,
+        current_time=hora_actual,
+    )
     system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
     system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}\n"
     
@@ -564,7 +718,8 @@ async def handle_user_turn(
     messages.append({"role": "user", "content": user_text})
     
     try:
-        completion = client.chat.completions.create(
+        # Llamada ASÍNCRONA al LLM (sin streaming para el endpoint clásico)
+        completion = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=messages,
             temperature=0.7,
@@ -597,3 +752,354 @@ async def handle_user_turn(
     ]
 
     return reply, session, quick_replies, response_metadata
+
+
+# ============================================================================
+# GENERADOR ASÍNCRONO DE STREAMING (SSE)
+# ============================================================================
+
+async def handle_user_turn_stream(
+    session: SessionStateSchema,
+    user_text: str,
+    context: str = "",
+    chat_history: Optional[List[Dict[str, str]]] = None,
+    user_locale: str = "es"
+) -> AsyncGenerator[str, None]:
+    """
+    Generador asíncrono que emite eventos SSE (Server Sent Events).
+    Cada evento tiene el formato: "data: {json}\n\n"
+    
+    El frontend puede consumirlo con EventSource o fetch + ReadableStream.
+    
+    FLUJO:
+    1. Emite 'start' → señal de inicio.
+    2. GUARDRAIL REGEX: Si detecta comando o crisis → emite 'guardrail' + 'done' y SALE.
+    3. Si no hay guardrail → pipeline normal de onboarding/slots.
+    4. Si hay respuesta determinística (onboarding) → emite 'guardrail' + 'done'.
+    5. Si se necesita LLM → stream de tokens uno a uno.
+    6. Al finalizar tokens → emite 'quick_reply', 'metadata', 'session_state', 'done'.
+    """
+    import time as _time
+    
+    # --- Helper: formatear evento SSE ---
+    def sse_event(event_type: str, data: Any) -> str:
+        """Formatea un chunk como evento SSE estándar."""
+        payload = json.dumps({"event": event_type, "data": data}, ensure_ascii=False)
+        return f"data: {payload}\n\n"
+    
+    # --- 1. Emitir señal de inicio ---
+    yield sse_event("start", {
+        "session_id": str(session.session_id),
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    
+    # --- Respuestas rápidas de bienvenida (reutilizables) ---
+    greeting_quick_replies = [
+        {"label": "😑 Aburrido/a", "value": "Estoy aburrido"},
+        {"label": "😤 Frustrado/a", "value": "Estoy frustrado"},
+        {"label": "😰 Ansioso/a", "value": "Estoy ansioso"},
+        {"label": "🌀 Distraído/a", "value": "Estoy distraído"},
+    ]
+
+    # =====================================================================
+    # FASE 1: GUARDRAILS REGEX (Pre-procesamiento, NO llama al LLM)
+    # =====================================================================
+    
+    # Guardrail: Comando __greeting__
+    if user_text.strip() == "__greeting__":
+        session.metadata["greeted"] = True
+        yield sse_event("guardrail", {
+            "text": "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?",
+            "quick_replies": greeting_quick_replies
+        })
+        yield sse_event("session_state", session.model_dump(mode='json'))
+        yield sse_event("done", {})
+        return
+    
+    # Guardrail: Comando __accept_strategy__
+    if user_text.strip() == "__accept_strategy__":
+        strategy_name = session.last_strategy or "Estrategia"
+        tiempo = session.slots.tiempo_bloque or 15
+        yield sse_event("guardrail", {
+            "text": f"¡Genial! 🎯 Vamos con **{strategy_name}**. Tu timer de {tiempo} minutos ya está corriendo. ¡Tú puedes! 💪",
+            "quick_replies": None
+        })
+        yield sse_event("metadata", {
+            "strategy": strategy_name,
+            "timer_config": {"duration_minutes": tiempo, "label": strategy_name}
+        })
+        yield sse_event("session_state", session.model_dump(mode='json'))
+        yield sse_event("done", {})
+        return
+    
+    # Guardrail: Comando __reject_strategy__
+    if user_text.strip() == "__reject_strategy__":
+        rejections = session.metadata.get("strategy_rejections", 0) + 1
+        session.metadata["strategy_rejections"] = rejections
+        rejected_list = session.metadata.get("rejected_strategies", [])
+        if session.last_strategy and session.last_strategy not in rejected_list:
+            rejected_list.append(session.last_strategy)
+            session.metadata["rejected_strategies"] = rejected_list
+        
+        if rejections >= 2:
+            session.metadata["strategy_rejections"] = 0
+            session.metadata["rejected_strategies"] = []
+            yield sse_event("guardrail", {
+                "text": "Entiendo que no hemos encontrado la estrategia ideal todavía. 🧘 A veces lo mejor es tomarse un momento para relajarse antes de volver al trabajo. Te recomiendo probar un ejercicio de bienestar. ¡Después volvemos con todo! 💜",
+                "quick_replies": None
+            })
+            yield sse_event("metadata", {"redirect": "wellness"})
+        else:
+            session.strategy_given = False
+            session.last_strategy = None
+            yield sse_event("guardrail", {
+                "text": "Sin problema, busquemos otra opción. 🔄 ¿Hay algo en particular que te gustaría probar diferente?",
+                "quick_replies": [
+                    {"label": "🔄 Sorpréndeme", "value": "Quiero otra estrategia diferente"},
+                    {"label": "⏱ Tengo poco tiempo", "value": "Dame algo rápido de hacer"},
+                    {"label": "🧘 Algo relajado", "value": "Quiero algo tranquilo"}
+                ]
+            })
+        yield sse_event("session_state", session.model_dump(mode='json'))
+        yield sse_event("done", {})
+        return
+    
+    # Guardrail: Detección de CRISIS (regex rápido + validación LLM)
+    crisis = await detect_crisis(user_text)
+    if crisis.get("is_crisis") and crisis.get("confidence", 0) > 0.7:
+        yield sse_event("guardrail", {
+            "text": "Escucho que estás en un momento muy difícil. Por favor, busca apoyo inmediato: **llama al 4141** (línea gratuita y confidencial del MINSAL). No estás sola/o.",
+            "quick_replies": None,
+            "is_crisis": True
+        })
+        yield sse_event("session_state", session.model_dump(mode='json'))
+        yield sse_event("done", {})
+        return
+    
+    # Guardrail: Reiniciar sesión
+    if "reiniciar" in user_text.lower():
+        session = SessionStateSchema(user_id=session.user_id, session_id=session.session_id)
+        yield sse_event("guardrail", {
+            "text": "¡Perfecto! Empecemos de nuevo. 🔄\n\n¿Cómo está tu motivación hoy?",
+            "quick_replies": greeting_quick_replies
+        })
+        yield sse_event("session_state", session.model_dump(mode='json'))
+        yield sse_event("done", {})
+        return
+    
+    # Guardrail: Saludo inicial automático
+    if not chat_history and not session.metadata.get("greeted"):
+        session.metadata["greeted"] = True
+        yield sse_event("guardrail", {
+            "text": "Hola, soy Flou, tu asistente Task-Motivation. 😊 Para empezar, ¿por qué no me dices cómo está tu motivación hoy?",
+            "quick_replies": greeting_quick_replies
+        })
+        yield sse_event("session_state", session.model_dump(mode='json'))
+        yield sse_event("done", {})
+        return
+
+    # =====================================================================
+    # FASE 2: EXTRACCIÓN DE SLOTS + ONBOARDING (respuestas determinísticas)
+    # =====================================================================
+    new_slots = await extract_slots_with_llm(user_text, session.slots)
+    session.slots = new_slots
+    session.iteration += 1
+
+    # Fases de onboarding: preguntas guiadas (sin LLM)
+    onboarding_response = _check_onboarding_phase(session)
+    if onboarding_response:
+        text, qr = onboarding_response
+        yield sse_event("guardrail", {"text": text, "quick_replies": qr})
+        yield sse_event("session_state", session.model_dump(mode='json'))
+        yield sse_event("done", {})
+        return
+
+    # Fallback: si no hay tiempo tras muchas iteraciones
+    if not session.slots.tiempo_bloque and session.iteration > 8:
+        session.slots.tiempo_bloque = 15
+
+    # =====================================================================
+    # FASE 3: INFERENCIA + SELECCIÓN DE ESTRATEGIA
+    # =====================================================================
+    Q2, Q3, enfoque = infer_q2_q3(session.slots)
+    session.metadata["Q2"] = Q2
+    session.metadata["Q3"] = Q3
+    session.metadata["enfoque"] = enfoque
+
+    estrategia = seleccionar_estrategia(
+        enfoque=enfoque, nivel=Q3,
+        tipo_tarea=session.slots.tipo_tarea,
+        fase=session.slots.fase,
+        tiempo_disponible=session.slots.tiempo_bloque or 15,
+        sentimiento=session.slots.sentimiento
+    )
+
+    rejected = session.metadata.get("rejected_strategies", [])
+    if estrategia["nombre"] in rejected:
+        estrategia = seleccionar_estrategia(
+            enfoque=enfoque, nivel=Q3,
+            tipo_tarea=session.slots.tipo_tarea,
+            fase=session.slots.fase,
+            tiempo_disponible=session.slots.tiempo_bloque or 15,
+            sentimiento=session.slots.sentimiento,
+            excluir=rejected
+        )
+
+    session.last_strategy = estrategia["nombre"]
+    session.strategy_given = True
+
+    # =====================================================================
+    # FASE 4: STREAMING DE TOKENS DEL LLM (Groq con stream=True)
+    # =====================================================================
+    hora_actual = datetime.now().strftime("%H:%M")
+    system_prompt = get_system_prompt(
+        enfoque, Q3,
+        user_locale=user_locale,
+        current_time=hora_actual,
+    )
+    system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
+    system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}\n"
+
+    messages = [{"role": "system", "content": system_prompt}]
+    if chat_history:
+        for msg in chat_history[-6:]:
+            role = "user" if msg.get("role") == "user" else "assistant"
+            content = msg.get("parts", [""])[0] if isinstance(msg.get("content"), list) else msg.get("content", "")
+            if not content and "text" in msg:
+                content = msg["text"]
+            messages.append({"role": role, "content": str(content)})
+    messages.append({"role": "user", "content": user_text})
+
+    full_reply = ""  # Acumulador para guardar el texto completo en BD
+    try:
+        # Invocación con stream=True: el LLM envía tokens incrementales
+        stream = await client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=300,
+            stream=True  # ← STREAMING ACTIVADO
+        )
+        
+        # Iterar sobre cada chunk del stream asincrónicamente
+        async for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta and delta.content:
+                token = delta.content
+                full_reply += token
+                # Emitir cada token individual al frontend
+                yield sse_event("token", {"text": token})
+                
+    except Exception as e:
+        logger.error(f"Error en streaming LLM: {e}")
+        # Fallback: usar template de estrategia si el LLM falla
+        fallback_reply = estrategia['template'].format(
+            tiempo=session.slots.tiempo_bloque or 15,
+            tema=session.slots.tipo_tarea,
+            cantidad="varios",
+            paso_1="Paso 1", paso_2="Paso 2", paso_3="Paso 3",
+            item_1="Item 1", item_2="Item 2", item_3="Item 3",
+            paso_1_detallado="Paso 1", paso_2_detallado="Paso 2", paso_3_detallado="Paso 3",
+            mitad_tiempo=int((session.slots.tiempo_bloque or 15) / 2),
+            accion_especifica="Comenzar"
+        )
+        full_reply = fallback_reply
+        yield sse_event("token", {"text": fallback_reply})
+        yield sse_event("error", {"message": str(e)})
+
+    # =====================================================================
+    # FASE 5: EMISIÓN DE METADATOS POST-STREAM
+    # =====================================================================
+    
+    # Emitir quick replies de validación de estrategia
+    yield sse_event("quick_reply", [
+        {"label": "✅ Empezar", "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
+        {"label": "🔄 Otra opción", "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
+    ])
+    
+    # Emitir metadata de la estrategia seleccionada
+    yield sse_event("metadata", {
+        "strategy": estrategia["nombre"],
+        "full_reply": full_reply  # Texto completo para persistencia en BD
+    })
+    
+    # Emitir el estado actualizado de la sesión
+    yield sse_event("session_state", session.model_dump(mode='json'))
+    
+    # Señal de fin del stream
+    yield sse_event("done", {})
+
+
+# ============================================================================
+# HELPER: VERIFICAR FASE DE ONBOARDING (Extraído para reutilización)
+# ============================================================================
+
+def _check_onboarding_phase(
+    session: SessionStateSchema
+) -> Optional[Tuple[str, List[Dict[str, str]]]]:
+    """
+    Verifica si la sesión está en una fase de onboarding (recopilación de datos).
+    Retorna (texto, quick_replies) si hay pregunta pendiente, o None si ya se completó.
+    Extraído como helper para reutilizar en handle_user_turn y handle_user_turn_stream.
+    """
+    # Fase 1: Sentimiento
+    if not session.slots.sentimiento and session.iteration <= 3:
+        return (
+            "Para poder ayudarte mejor, ¿cómo te sientes ahora mismo con tu trabajo?",
+            [
+                {"label": "😑 Aburrido/a", "value": "Me siento aburrido"},
+                {"label": "😤 Frustrado/a", "value": "Me siento frustrado"},
+                {"label": "😰 Ansioso/a", "value": "Tengo ansiedad"},
+                {"label": "🌀 Distraído/a", "value": "Estoy distraído"}
+            ]
+        )
+    
+    # Fase 2: Tarea
+    if session.slots.sentimiento and not session.slots.tipo_tarea and session.iteration <= 4:
+        return (
+            "Perfecto. Ahora cuéntame, ¿qué tipo de trabajo necesitas hacer?",
+            [
+                {"label": "📝 Escribir ensayo", "value": "Tengo que escribir un ensayo"},
+                {"label": "📖 Leer/Estudiar", "value": "Tengo que leer"},
+                {"label": "🧮 Resolver ejercicios", "value": "Tengo que resolver ejercicios"},
+                {"label": "💻 Programar", "value": "Tengo que programar"}
+            ]
+        )
+    
+    # Fase 3: Plazo
+    if session.slots.sentimiento and session.slots.tipo_tarea and not session.slots.plazo and session.iteration <= 5:
+        return (
+            "Entiendo. ¿Para cuándo necesitas tenerlo listo?",
+            [
+                {"label": "🔥 Hoy mismo", "value": "Es para hoy"},
+                {"label": "⏰ Mañana", "value": "Es para mañana"},
+                {"label": "📅 Esta semana", "value": "Es para esta semana"},
+            ]
+        )
+    
+    # Fase 4: Fase de trabajo
+    if (session.slots.sentimiento and session.slots.tipo_tarea and 
+        session.slots.plazo and not session.slots.fase and session.iteration <= 6):
+        return (
+            "Muy bien. ¿En qué etapa del trabajo estás ahora?",
+            [
+                {"label": "💡 Empezando (Ideas)", "value": "Estoy en la fase de ideacion"},
+                {"label": "📝 Ejecutando", "value": "Estoy ejecutando"},
+                {"label": "🔍 Revisando", "value": "Estoy revisando"}
+            ]
+        )
+    
+    # Fase 5: Tiempo disponible
+    if not session.slots.tiempo_bloque and session.iteration <= 7:
+        return (
+            "¡Ya casi! ⏱ ¿Cuánto tiempo tienes disponible ahora para trabajar con una estrategia?",
+            [
+                {"label": "⚡ 10 min", "value": "Tengo 10 minutos"},
+                {"label": "⏰ 15 min", "value": "Tengo 15 minutos"},
+                {"label": "🕐 25 min", "value": "Tengo 25 minutos"},
+                {"label": "🕑 45 min", "value": "Tengo 45 minutos"},
+            ]
+        )
+    
+    # No hay fase de onboarding pendiente
+    return None
