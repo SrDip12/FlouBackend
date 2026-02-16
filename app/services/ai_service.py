@@ -291,19 +291,34 @@ async def extract_slots_with_llm(free_text: str, current_slots: Slots) -> Slots:
     try:
         sys_prompt = """Extrae como JSON los campos del texto del usuario.
 Reglas Flexibles:
-1. 'tipo_tarea': Mapea lo que el usuario quiere hacer a la categoría más cercana:
-   - 'coding': programar, hacer una ia, código, desarrollo, bug, script.
-   - 'ensayo': escribir, redacción, texto largo.
-   - 'resumen': estudiar, leer, sintetizar.
-   - 'presentacion': diapositivas, ppt, slide.
-   - 'resolver_problemas': ejercicios, matemáticas, lógica.
-   - 'proyecto': avanzar proyecto, trabajo grupal.
-2. 'sentimiento': Infiere la emoción subyacente (baja motivación, ansiedad, aburrimiento).
-3. 'tiempo_bloque': Si el usuario menciona una duración (ej: "tengo 20 min"), extráela.
-4. TYPOS: El usuario puede tener errores (ej: "necesitohacer"). Separa mentalmente las palabras y extrae la intención.
+1. 'tipo_tarea': Mapea lo que el usuario quiere hacer a la categoría más cercana.
+   - coding: programar, hacer una ia, código, desarrollo, bug, script.
+   - ensayo: escribir, redacción, texto largo.
+   - resumen: estudiar, leer, sintetizar.
+   - presentacion: diapositivas, ppt, slide.
+   - resolver_problemas: ejercicios, matemáticas, lógica.
+   - proyecto: avanzar proyecto, trabajo grupal.
+2. 'sentimiento': Infiere la emoción subyacente.
+   - Si dice "estoy bien", "normal" o solo enuncia la tarea, usa "neutral".
+   - Si muestra entusiasmo, usa "positivo".
+   - Solo negativos (ansiedad, frustracion) con evidencia clara.
+3. 'fase' (CRITICO): Infiere la etapa del trabajo.
+   - "Tengo que empezar", "no se de que hacer", "hoja en blanco" -> ideacion
+   - "Tengo esquema", "organizandome" -> planificacion
+   - "Estoy escribiendo", "haciendo", "programando" -> ejecucion
+   - "Revisar", "corregir", "terminar detalles" -> revision
+   - Si no hay pistas, asume "ejecucion".
+4. 'plazo' (CRITICO): Infiere urgencia.
+   - "Para hoy", "urgente", "ya", "en un rato" -> hoy
+   - "Mañana", "mañana temprano" -> <24h
+   - "Esta semana", "jueves" -> esta_semana
+   - "Próxima semana", "mes" -> >1_semana
+   - Si no menciona nada, asume "esta_semana".
+5. 'tiempo_bloque': Si menciona duración ("20 min"), extráela.
+6. INPUTS CORTOS: "Ensayo" -> tarea=ensayo, sentimiento=neutral, fase=ejecucion, plazo=esta_semana.
 
 Campos validos:
-- sentimiento: aburrimiento|frustracion|ansiedad_error|dispersion_rumiacion|baja_autoeficacia|otro
+- sentimiento: aburrimiento|frustracion|ansiedad_error|dispersion_rumiacion|baja_autoeficacia|neutral|positivo|otro
 - sentimiento_otro: texto libre
 - tipo_tarea: ensayo|esquema|borrador|lectura_tecnica|resumen|resolver_problemas|protocolo_lab|mcq|presentacion|coding|bugfix|proofreading|proyecto|otro
 - plazo: hoy|<24h|esta_semana|>1_semana
