@@ -496,14 +496,27 @@ El usuario NUNCA debe escuchar términos como "Enfoque de Promoción" o "Prevenc
 6. When you propose a strategy, frame it as an invitation: "Want to try...?" or "How about we...?"
 7. NEVER output JSON, NEVER mention slots, NEVER say "I need more information"."""
     else:
-        formato = """REGLAS DE RESPUESTA:
-1. Valida la emoción del usuario en UNA frase empática (nunca te la saltes).
-2. Da UNA sola recomendación específica y accionable — no una lista de 5 opciones.
-3. Si el usuario solo conversa (sin tarea clara), sé conversacional y empática. No fuerces una estrategia.
-4. Mantén respuestas bajo 100 palabras. Sé concisa. Nada de muros de texto.
-5. Usa **negrita** para acciones clave o nombres de estrategias.
-6. Cuando propones una estrategia, formúlala como invitación: "¿Te gustaría probar...?" o "¿Qué tal si...?"
-7. NUNCA respondas JSON, NUNCA menciones slots, NUNCA digas "necesito más información"."""
+        formato = """REGLAS DE RESPUESTA (IMPORTANTE):
+1. **EMPATÍA REAL:** Si el usuario expresa agobio, estrés, cansancio o negatividad, **PROHIBIDO empezar con "Perfecto", "Genial" o "Excelente".**
+   - Usa: "Te entiendo", "Qué pesado", "Es normal", "Respiremos".
+   - Valida la emoción antes de proponer nada.
+
+2. **REGLA DEL TIEMPO (CRÍTICA):**
+   - Si NO sabes cuánto tiempo tiene el usuario (campo tiempo_bloque vacío):
+   - **TU PRIMERA PRIORIDAD ES PREGUNTAR: "¿Cuánto tiempo tienes disponible?"**
+   - NO asumas un tiempo (ej: 25 min) sin preguntar.
+   - NO propongas estrategias complejas hasta saber el tiempo.
+
+3. **ESTRUCTURA:**
+   - Valida la emoción en 1 frase.
+   - Propón 1 acción concreta.
+   - Usa **negritas** para conceptos clave.
+   - Máximo 80 palabras. Sé conciso.
+
+4. **COMANDOS OCULTOS (VISIBLES SOLO PARA TI):**
+   - Si el usuario define un tiempo, añade AL FINAL: `__timer_config:{"duration_minutes": X}__`.
+   - Si acuerdan estrategia, añade: `__strategy_confirmed__`."""
+
 
     # --- Ensamblaje final del prompt ---
     return f"""{personalidad}
@@ -767,6 +780,33 @@ async def handle_user_turn(
     return reply, session, quick_replies, response_metadata
 
 
+    # =========================================================================================
+    # 4. REGLAS DE ORO (FORMATO Y LÓGICA)
+    # =========================================================================================
+    reglas_oro = f"""
+1. **EMPATÍA PRIMERO (CRÍTICO):**
+   - Si el usuario dice estar "agobiado", "estresado", "cansado" o negativo -> **JAMÁS empieces con "Perfecto", "Genial" o "Excelente".** Eso se siente robótico e insensible.
+   - En su lugar, usa: "Te entiendo", "Qué pesado", "Respiremos", "Es normal sentirse así".
+   - Valida la emoción antes de proponer solución.
+
+2. **REGLA DEL TIEMPO (OBLIGATORIA):**
+   - Si el usuario pide ayuda para estudiar/trabajar pero NO ha dicho por cuánto tiempo:
+   - **TU ÚNICA MISIÓN ES PREGUNTAR: "¿Cuánto tiempo tienes disponible?"**
+   - NO propongas estrategias específicas ni inicies timers hasta saber el tiempo.
+   - NO inventes el tiempo (nunca asumas 25 min si no te lo dijeron).
+   
+   Ejemplo INCORRECTO: User: "Ayúdame" -> AI: "Perfecto, haremos 25 min." (MAL)
+   Ejemplo CORRECTO: User: "Ayúdame" -> AI: "Claro, vamos a darle. ¿Cuánto tiempo tienes para esto?" (BIEN)
+
+3. **FORMATO:**
+   - Respuestas CORTAS (máx 2 párrafos).
+   - Usa **negritas** para conceptos clave.
+   - Listas con bullets si hay pasos.
+
+4. **COMANDOS OCULTOS (VISIBLES SOLO PARA TI):**
+   - Si el usuario te da un tiempo (ej: "30 min"), añade AL FINAL: `__timer_config:{{"duration_minutes": 30}}__`.
+   - Si acuerdan una estrategia, añade: `__strategy_confirmed__`.
+    """
 # ============================================================================
 # GENERADOR ASÍNCRONO DE STREAMING (SSE)
 # ============================================================================
@@ -1095,7 +1135,7 @@ def _check_onboarding_phase(
     # Fase 2: Tarea
     if session.slots.sentimiento and not session.slots.tipo_tarea and session.iteration <= 4:
         return (
-            "Perfecto. Ahora cuéntame, ¿qué tipo de trabajo necesitas hacer?",
+            "Entiendo. Para poder orientarte mejor, cuéntame: ¿qué tipo de trabajo necesitas hacer?",
             [
                 {"label": "📝 Escribir ensayo", "value": "Tengo que escribir un ensayo"},
                 {"label": "📖 Leer/Estudiar", "value": "Tengo que leer"},
@@ -1119,7 +1159,7 @@ def _check_onboarding_phase(
     if (session.slots.sentimiento and session.slots.tipo_tarea and 
         session.slots.plazo and not session.slots.fase and session.iteration <= 6):
         return (
-            "Muy bien. ¿En qué etapa del trabajo estás ahora?",
+            "Vale. ¿Y en qué etapa del trabajo te encuentras ahora mismo?",
             [
                 {"label": "💡 Empezando (Ideas)", "value": "Estoy en la fase de ideacion"},
                 {"label": "📝 Ejecutando", "value": "Estoy ejecutando"},
