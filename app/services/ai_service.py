@@ -653,7 +653,7 @@ async def handle_user_turn(
 
     # Phase 2: Tarea
     if session.slots.sentimiento and not session.slots.tipo_tarea and session.iteration <= 4:
-         return "Perfecto. Ahora cuéntame, ¿qué tipo de trabajo necesitas hacer?", session, [
+         return "Entiendo. Para poder orientarte mejor, cuéntame: ¿qué tipo de trabajo necesitas hacer?", session, [
             {"label": "📝 Escribir ensayo", "value": "Tengo que escribir un ensayo"},
             {"label": "📖 Leer/Estudiar", "value": "Tengo que leer"},
             {"label": "🧮 Resolver ejercicios", "value": "Tengo que resolver ejercicios"},
@@ -676,19 +676,15 @@ async def handle_user_turn(
             {"label": "🔍 Revisando", "value": "Estoy revisando"}
         ], {}
 
-    # Phase 5: Tiempo disponible — preguntar cuánto tiempo tiene el usuario
-    if not session.slots.tiempo_bloque and session.iteration <= 7:
-        return "¡Ya casi! ⏱ ¿Cuánto tiempo tienes disponible ahora para trabajar con una estrategia?", session, [
+    # Phase 5: Tiempo disponible — OBLIGATORIO, sin límite de iteración
+    # NUNCA avanzar a estrategia sin saber cuánto tiempo tiene el usuario
+    if not session.slots.tiempo_bloque:
+        return "¡Ya casi! ⏱ **¿Cuánto tiempo tienes disponible ahora?** Esto me ayuda a elegir la mejor estrategia para ti.", session, [
             {"label": "⚡ 10 min", "value": "Tengo 10 minutos"},
             {"label": "⏰ 15 min", "value": "Tengo 15 minutos"},
             {"label": "🕐 25 min", "value": "Tengo 25 minutos"},
             {"label": "🕑 45 min", "value": "Tengo 45 minutos"},
         ], {}
-
-    # Fallback: si no se extrajo tiempo después de varias iteraciones, usar 15 min
-    # Solo si ya pasamos la fase de preguntas y estamos forzando una estrategia
-    if not session.slots.tiempo_bloque and session.iteration > 8:
-        session.slots.tiempo_bloque = 15
 
     # 4. Inferir Q2/Q3/Enfoque
     Q2, Q3, enfoque = infer_q2_q3(session.slots)

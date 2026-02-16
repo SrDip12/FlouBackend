@@ -18,7 +18,7 @@ class Slots(BaseModel):
     ramo: Optional[str] = None
     plazo: Optional[str] = None        # "hoy", "<24h", "esta_semana", ">1_semana"
     fase: Optional[str] = None         # "ideacion", "planificacion", "ejecucion", "revision"
-    tiempo_bloque: Optional[int] = 15  # Minutos disponibles
+    tiempo_bloque: Optional[int] = None  # Minutos disponibles — DEBE ser None para forzar pregunta
     nivel_urgencia: Optional[str] = None  # "alta", "media", "baja"
     autoeficacia: Optional[str] = None  # "alta", "media", "baja"
     

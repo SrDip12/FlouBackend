@@ -1,0 +1,10 @@
+services:
+  # Configuración del servicio web en Render
+  - type: web
+    name: flou-backend
+    env: docker
+    plan: free # Plan gratuito por defecto
+    autoDeploy: true # Fuerza el despliegue automático al hacer push
+    envVars:
+      - key: PORT
+        value: 10000
