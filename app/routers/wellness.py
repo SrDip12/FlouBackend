@@ -79,3 +79,24 @@ async def get_motivation(
     lang = detect_user_language(request)
     service = WellnessService()
     return await service.get_motivation_message(lang)
+
+
+@router.post("/exercises/complete", response_model=ExerciseCompletionResponse)
+async def complete_exercise(
+    request: Request,
+    completion: ExerciseCompletionRequest,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Endpoint para registrar que un ejercicio ha sido completado.
+    
+    Args:
+        completion: Datos del ejercicio completado
+        user_id: ID del usuario autenticado
+        
+    Returns:
+        ExerciseCompletionResponse con confirmación
+    """
+    lang = detect_user_language(request)
+    service = WellnessService()
+    return await service.save_exercise_completion(user_id, completion, lang)

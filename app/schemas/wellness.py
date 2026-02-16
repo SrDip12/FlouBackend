@@ -49,9 +49,28 @@ class ExerciseResponse(BaseModel):
     duration_seconds: int = Field(..., description="Duración en segundos")
     instructions: List[str] = Field(..., description="Instrucciones paso a paso")
     energy_level: str = Field(..., description="Nivel de energía para el que está diseñado")
+    intro_url: Optional[str] = Field(default=None, description="URL del audio de introducción")
+    audio_url: Optional[str] = Field(default=None, description="URL del audio principal del ejercicio")
+
 
 class MotivationResponse(BaseModel):
     """Respuesta con mensaje motivacional"""
     message: str = Field(..., description="Mensaje motivacional de Flou")
     author: str = Field(default="Flou", description="Autor del mensaje")
     category: Optional[str] = Field(default=None, description="Categoría del mensaje")
+
+class ExerciseCompletionRequest(BaseModel):
+    """Modelo para registrar la completitud de un ejercicio"""
+    exercise_type: str = Field(..., description="Tipo de ejercicio completado")
+    duration_seconds: int = Field(..., description="Duración del ejercicio en segundos")
+    completed: bool = Field(default=True, description="Si se completó el ejercicio")
+    energy_level: str = Field(..., description="Nivel de energía asociado (rojo, ambar, verde)")
+
+class ExerciseCompletionResponse(BaseModel):
+    """Respuesta al completar un ejercicio"""
+    id: int
+    user_id: str
+    exercise_type: str
+    completed_at: datetime
+    message: str
+
