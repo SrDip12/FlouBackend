@@ -992,9 +992,21 @@ async def handle_user_turn_stream(
         yield sse_event("done", {})
         return
 
-    # Fallback: si no hay tiempo tras muchas iteraciones
-    if not session.slots.tiempo_bloque and session.iteration > 8:
-        session.slots.tiempo_bloque = 15
+    # GUARDIA OBLIGATORIA: Si NO hay tiempo definido, SIEMPRE preguntar.
+    # Nunca avanzar a estrategia sin saber cuánto tiempo tiene el usuario.
+    if not session.slots.tiempo_bloque:
+        yield sse_event("guardrail", {
+            "text": "¡Ya casi! ⏱ Para configurar tu sesión, **¿cuánto tiempo tienes disponible ahora mismo?**",
+            "quick_replies": [
+                {"label": "⚡ 10 min", "value": "Tengo 10 minutos", "icon": "⚡", "color": "mint"},
+                {"label": "⏰ 15 min", "value": "Tengo 15 minutos", "icon": "⏰", "color": "sky"},
+                {"label": "🕐 25 min", "value": "Tengo 25 minutos", "icon": "🕐", "color": "lavender"},
+                {"label": "🕑 45 min", "value": "Tengo 45 minutos", "icon": "🕑", "color": "lavender"},
+            ]
+        })
+        yield sse_event("session_state", session.model_dump(mode='json'))
+        yield sse_event("done", {})
+        return
 
     # =====================================================================
     # FASE 3: INFERENCIA + SELECCIÓN DE ESTRATEGIA
@@ -1167,8 +1179,8 @@ def _check_onboarding_phase(
             ]
         )
     
-    # Fase 5: Tiempo disponible
-    if not session.slots.tiempo_bloque and session.iteration <= 7:
+    # Fase 5: Tiempo disponible (SIN LÍMITE DE ITERACIÓN - SIEMPRE preguntar si falta)
+    if not session.slots.tiempo_bloque:
         return (
             "¡Ya casi! ⏱ ¿Cuánto tiempo tienes disponible ahora para trabajar con una estrategia?",
             [
