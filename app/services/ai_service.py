@@ -1120,6 +1120,12 @@ async def handle_user_turn_stream(
                 sentimiento=session.slots.sentimiento,
                 excluir=rejected
             )
+        
+        # I18N: Adaptar estrategia al idioma del usuario
+        if user_locale == "en":
+            estrategia["nombre"] = estrategia.get("nombre_en", estrategia["nombre"])
+            estrategia["descripcion"] = estrategia.get("descripcion_en", estrategia["descripcion"])
+            estrategia["template"] = estrategia.get("template_en", estrategia["template"])
 
         session.last_strategy = estrategia["nombre"]
         session.strategy_given = True
@@ -1132,7 +1138,8 @@ async def handle_user_turn_stream(
             current_time=hora_actual,
         )
         system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
-        system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}\n"
+        system_prompt += "\nINSTRUCCIONES CLAVE: Usa el TEMPLATE anterior como base para tu respuesta. Asegúrate de dar los pasos claros y accionables al usuario. No resumas demasiado; el usuario necesita las instrucciones específicas.\n"
+        system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}, cantidad='varios'\n"
 
         # Streamear tokens del LLM con estrategia (inline)
         messages = _build_llm_messages(system_prompt, chat_history, user_text)
@@ -1164,13 +1171,11 @@ async def handle_user_turn_stream(
             full_reply = fallback
             yield sse_event("token", {"text": fallback})
 
-        # Emitir quick replies de validación
-        yield sse_event("quick_reply", [
-            {"label": qr_texts["start"], "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
-            {"label": qr_texts["other_option"], "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
-        ])
+        # Emitir quick replies de validación (vacio para no duplicar con la UI nativa)
+        yield sse_event("quick_reply", [])
         yield sse_event("metadata", {
             "strategy": estrategia["nombre"],
+            "strategy_description": estrategia["descripcion"],
             "full_reply": full_reply
         })
         yield sse_event("session_state", session.model_dump(mode='json'))
@@ -1288,6 +1293,8 @@ def _build_free_conversation_prompt(
     
     if slots.fase:
         info_conocida.append(f"• Fase: {slots.fase}")
+    else:
+        info_faltante.append("en qué fase está (ideación, borrador, revisión)")
     
     if slots.tiempo_bloque:
         info_conocida.append(f"• Tiempo disponible: {slots.tiempo_bloque} min")
