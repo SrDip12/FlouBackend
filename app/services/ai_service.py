@@ -301,31 +301,33 @@ Reglas Flexibles:
 2. 'sentimiento': Infiere la emoción subyacente.
    - Si dice "estoy bien", "normal" o solo enuncia la tarea, usa "neutral".
    - Si muestra entusiasmo, usa "positivo".
-   - Solo negativos (ansiedad, frustracion) con evidencia clara.
-3. 'fase' (CRITICO): Infiere la etapa del trabajo.
+   - Si dice "abrumado", "estresado", usa "abrumado".
+   - Si dice "ansioso", usa "ansiedad".
+   - Solo negativos con evidencia clara.
+3. 'fase' (CRITICO): Identifica la etapa del trabajo.
    - "Tengo que empezar", "no se de que hacer", "hoja en blanco" -> ideacion
    - "Tengo esquema", "organizandome" -> planificacion
    - "Estoy escribiendo", "haciendo", "programando" -> ejecucion
    - "Revisar", "corregir", "terminar detalles" -> revision
-   - Si no hay pistas, asume "ejecucion".
-4. 'plazo' (CRITICO): Infiere urgencia.
+   - Si no hay pistas explícitas en el texto, usa null (NO asumas nada).
+4. 'plazo' (CRITICO): Identifica urgencia.
    - "Para hoy", "urgente", "ya", "en un rato" -> hoy
    - "Mañana", "mañana temprano" -> <24h
    - "Esta semana", "jueves" -> esta_semana
    - "Próxima semana", "mes" -> >1_semana
-   - Si no menciona nada, asume "esta_semana".
-5. 'tiempo_bloque': Si menciona duración ("20 min"), extráela.
-6. INPUTS CORTOS: "Ensayo" -> tarea=ensayo, sentimiento=neutral, fase=ejecucion, plazo=esta_semana.
+   - Si no menciona nada explícitamente, usa null (NO asumas nada).
+5. 'tiempo_bloque': Si menciona duración ("20 min", "15 minutos"), extráela como número entero. Si no, usa null.
+6. INPUTS CORTOS: "Ensayo" -> tarea=ensayo. Todo lo demás que no se diga explícitamente, será null.
 
 Campos validos:
-- sentimiento: aburrimiento|frustracion|ansiedad_error|dispersion_rumiacion|baja_autoeficacia|neutral|positivo|otro
+- sentimiento: aburrimiento|frustracion|ansiedad|abrumado|dispersion_rumiacion|baja_autoeficacia|neutral|positivo|otro
 - sentimiento_otro: texto libre
 - tipo_tarea: ensayo|esquema|borrador|lectura_tecnica|resumen|resolver_problemas|protocolo_lab|mcq|presentacion|coding|bugfix|proofreading|proyecto|otro
-- plazo: hoy|<24h|esta_semana|>1_semana
-- fase: ideacion|planificacion|ejecucion|revision
-- tiempo_bloque: entero (minutos)
+- plazo: hoy|<24h|esta_semana|>1_semana|null
+- fase: ideacion|planificacion|ejecucion|revision|null
+- tiempo_bloque: entero (minutos) o null
 
-Responde SOLO JSON. Si un campo no está claro, usa null."""
+Responde SOLO JSON. Si un campo no está claro, usa null (NUNCA inventes o asumas)."""
 
         user_prompt = f"""Texto: "{free_text}"
 Slots actuales: {current_slots.model_dump_json()}"""
@@ -398,7 +400,7 @@ def seleccionar_estrategia(
 ) -> Dict:
     
     # 1. Seguridad: Ansiedad/Baja autoeficacia -> Prevención + Concreto
-    if sentimiento in ["ansiedad_error", "baja_autoeficacia"]:
+    if sentimiento in ["ansiedad_error", "ansiedad", "abrumado", "baja_autoeficacia"]:
         enfoque = "prevencion_vigilant"
         nivel = "↓" # CONCRETO is ↓
     
@@ -778,6 +780,7 @@ async def handle_user_turn(
     new_slots = await extract_slots_with_llm(user_text, session.slots)
     session.slots = new_slots
     session.iteration += 1
+    logger.info(f"\n=======================\nDEBUG SLOTS:\n{session.slots.model_dump_json(indent=2)}\n=======================\n")
 
     # Phase 1: Sentimiento (único guardrail hardcodeado)
     if not session.slots.sentimiento and session.iteration <= 3:
@@ -1072,6 +1075,7 @@ async def handle_user_turn_stream(
     new_slots = await extract_slots_with_llm(user_text, session.slots)
     session.slots = new_slots
     session.iteration += 1
+    logger.info(f"\n=======================\nDEBUG SLOTS:\n{session.slots.model_dump_json(indent=2)}\n=======================\n")
 
     # Solo Phase 1 (sentimiento) es guardrail hardcodeado
     if not session.slots.sentimiento and session.iteration <= 3:
