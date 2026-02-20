@@ -152,8 +152,8 @@
       "revision"
     ],
     "tiempo_minimo": 10,
-    "template": "Vamos a revisar con calma y asegurarnos de que todo esté bien. ✓\n\n**Checklist ({tiempo} min):**\n1. **Gramática:** Lee en voz alta, detecta errores\n2. **Estructura:** ¿Tiene introducción/desarrollo/cierre?\n3. **Coherencia:** ¿Las ideas fluyen?\n4. **Formato:** ¿Cumple requisitos (fuente, márgenes)?\n\nUsa un ✓ al completar cada paso. Ve lento, es normal.\n\n¿Empezamos? 🔍",
-    "template_en": "Let's review calmly and make sure everything is right. ✓\n\n**Checklist ({tiempo} min):**\n1. **Grammar:** Read aloud, catch errors\n2. **Structure:** Has intro/body/conclusion?\n3. **Coherence:** Do ideas flow?\n4. **Format:** Meets requirements (font, margins)?\n\nUse a ✓ when completing each step. Go slow, it's normal.\n\nShall we start? 🔍",
+    "template": "Vamos a revisar con calma y asegurarnos de que todo esté bien.\n\n**Checklist ({tiempo} min):**\n1. **Gramática:** Lee en voz alta, detecta errores\n2. **Estructura:** ¿Tiene introducción/desarrollo/cierre?\n3. **Coherencia:** ¿Las ideas fluyen?\n4. **Formato:** ¿Cumple requisitos (fuente, márgenes)?\n\nVe paso a paso. Ve lento, es normal.\n\n¿Empezamos? 🔍",
+    "template_en": "Let's review calmly and make sure everything is right.\n\n**Checklist ({tiempo} min):**\n1. **Grammar:** Read aloud, catch errors\n2. **Structure:** Has intro/body/conclusion?\n3. **Coherence:** Do ideas flow?\n4. **Format:** Meets requirements (font, margins)?\n\nGo step by step. Go slow, it's normal.\n\nShall we start? 🔍",
     "pasos": [
       "**Gramática:** Lee en voz alta, detecta errores",
       "**Estructura:** ¿Tiene introducción/desarrollo/cierre?",
@@ -407,8 +407,8 @@
       "ejecucion"
     ],
     "tiempo_minimo": 10,
-    "template": "Vamos a hacer esto súper simple, paso a paso. 🪜\n\n**Tu plan de {tiempo} min:**\n1. {paso_1}\n2. {paso_2}\n3. {paso_3}\n\n**Importante:** Haz UNO a la vez. Cuando termines uno, táchalo. No pienses en el siguiente hasta terminar el actual.\n\n¿Empezamos por el paso 1? ⬜→✅",
-    "template_en": "Let's make this super simple, step by step. 🪜\n\n**Your {tiempo} min plan:**\n1. {paso_1}\n2. {paso_2}\n3. {paso_3}\n\n**Important:** Do ONE at a time. When finished, cross it out. Don't think about the next until finishing the current.\n\nStart with step 1? ⬜→✅",
+    "template": "Vamos a hacer esto súper simple, paso a paso.\n\n**Tu plan de {tiempo} min:**\n1. {paso_1}\n2. {paso_2}\n3. {paso_3}\n\n**Importante:** Haz UNO a la vez. No pienses en el siguiente hasta terminar el actual.\n\n¿Empezamos por el paso 1?",
+    "template_en": "Let's make this super simple, step by step.\n\n**Your {tiempo} min plan:**\n1. {paso_1}\n2. {paso_2}\n3. {paso_3}\n\n**Important:** Do ONE at a time. Don't think about the next until finishing the current.\n\nStart with step 1?",
     "pasos": [
       "{paso_1}",
       "{paso_2}",
@@ -474,8 +474,8 @@
       "revision"
     ],
     "tiempo_minimo": 10,
-    "template": "Aquí está tu checklist ultra-específico. ☑️\n\n**En {tiempo} min, completa:**\n☐ {item_1}\n☐ {item_2}\n☐ {item_3}\n\nMarca cada ☐ cuando termines. Siente la satisfacción de cada \"✓\".\n\n¿Vamos por el primero? 📝",
-    "template_en": "Here is your ultra-specific checklist. ☑️\n\n**In {tiempo} min, complete:**\n☐ {item_1}\n☐ {item_2}\n☐ {item_3}\n\nCheck each ☐ when done. Feel the satisfaction of each \"✓\".\n\nShall we go for the first? 📝",
+    "template": "Aquí está tu checklist ultra-específico.\n\n**En {tiempo} min, completa:**\n- {item_1}\n- {item_2}\n- {item_3}\n\nToma tu tiempo y avanza uno por uno.\n\n¿Vamos por el primero? 📝",
+    "template_en": "Here is your ultra-specific checklist.\n\n**In {tiempo} min, complete:**\n- {item_1}\n- {item_2}\n- {item_3}\n\nTake your time and go one by one.\n\nShall we go for the first? 📝",
     "pasos": [
       "{item_1}",
       "{item_2}",

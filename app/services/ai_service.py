@@ -649,11 +649,7 @@ El usuario NUNCA debe escuchar términos como "Enfoque de Promoción" o "Prevenc
    - Máximo 80 palabras. Sé conciso.
 
 4. **ENFOQUE ACADÉMICO:** Si el usuario pregunta cosas de cultura general, charla de temas aleatorios o pide que le hagas la tarea, redirígelo educadamente. Ej: "Estoy aquí para ayudarte a organizarte y avanzar, no para hacer tu tarea por ti. ¿Qué parte te está costando más?"
-5. **ESTRATEGIA PASO A PASO:** Cuando expliques una estrategia, usa el template proporcionado para desglosarla claramente en instrucciones secuenciales y manejables. No asumas pasos, explícalos de forma accionable.
-
-6. **COMANDOS OCULTOS (VISIBLES SOLO PARA TI):**
-   - Si el usuario define un tiempo, añade AL FINAL: `__timer_config:{"duration_minutes": X}__`.
-   - Si acuerdan estrategia, añade: `__strategy_confirmed__`."""
+5. **ESTRATEGIA PASO A PASO:** Cuando expliques una estrategia, usa el template proporcionado para desglosarla claramente en instrucciones secuenciales y manejables. No asumas pasos, explícalos de forma accionable."""
 
 
     # --- Ensamblaje final del prompt ---
@@ -720,6 +716,7 @@ async def handle_user_turn(
             None,
             {
                 "strategy": strategy_name,
+                "strategy_steps": session.metadata.get("last_strategy_steps", []),
                 "timer_config": {"duration_minutes": tiempo, "label": strategy_name}
             }
         )
@@ -835,6 +832,7 @@ async def handle_user_turn(
             
         session.last_strategy = estrategia["nombre"]
         session.strategy_given = True
+        session.metadata["last_strategy_steps"] = estrategia.get("pasos", [])
         
         hora_actual = datetime.now().strftime("%H:%M")
         system_prompt = get_system_prompt(enfoque, Q3, user_locale=user_locale, current_time=hora_actual)
@@ -990,6 +988,7 @@ async def handle_user_turn_stream(
         })
         yield sse_event("metadata", {
             "strategy": strategy_name,
+            "strategy_steps": session.metadata.get("last_strategy_steps", []),
             "timer_config": {"duration_minutes": tiempo, "label": strategy_name}
         })
         yield sse_event("session_state", session.model_dump(mode='json'))
@@ -1143,6 +1142,7 @@ async def handle_user_turn_stream(
 
         session.last_strategy = estrategia["nombre"]
         session.strategy_given = True
+        session.metadata["last_strategy_steps"] = estrategia.get("pasos", [])
 
         # System prompt CON estrategia
         hora_actual = datetime.now().strftime("%H:%M")
@@ -1305,14 +1305,18 @@ def _build_free_conversation_prompt(
     
     if slots.plazo:
         info_conocida.append(f"• Plazo: {slots.plazo}")
+    else:
+        info_faltante.append("cuál es el plazo de entrega o para cuándo es")
     
     if slots.fase:
         info_conocida.append(f"• Fase: {slots.fase}")
     else:
-        info_faltante.append("en qué fase está (ideación, borrador, revisión)")
+        info_faltante.append("en qué fase está (ideación, borrador, revisión, ejecución)")
     
     if slots.tiempo_bloque:
         info_conocida.append(f"• Tiempo disponible: {slots.tiempo_bloque} min")
+    else:
+        info_faltante.append("cuánto tiempo libre tiene disponible ahora mismo para trabajar")
     
     conocido_str = "\n".join(info_conocida) if info_conocida else "Aún no tenemos información específica."
     faltante_str = ", ".join(info_faltante) if info_faltante else "Nada crítico falta."
@@ -1341,7 +1345,7 @@ YOUR MISSION:
 - NEVER ask more than ONE question per message.
 - CRITICAL: DO NOT output lists of options, buttons like [Start] or checkboxes (✅/🔄). The interface handles UI elements. ONLY output conversational text.
 - NEVER output JSON or mention system internals.
-- **ACADEMIC FOCUS**: If the user asks general knowledge questions, chats about random topics, or asks you to do their homework completely, politely redirect them. Ex: "I'm here to help you get your work done, not do it for you. What task are you avoiding right now?"
+- **ACADEMIC FOCUS**: If the user asks general knowledge questions, chats about random topics, or asks you to do their homework completely, politely redirect them. Ex: "I'm here to help you get your work done, not do it for you. What task are you avoiding right now?" OR "We can talk about that later, but let's focus on your tasks right now. How much time do you actually have to work?" Ask one of the missing pieces of info from the section below.
 
 EXAMPLES OF GOOD RESPONSES:
 ✅ "Being frustrated with a bug is the worst 😤 Tell me more — what are you working on? Sometimes just talking it through helps."
@@ -1373,7 +1377,7 @@ TU MISIÓN:
 - CRÍTICO: NO generes listas de opciones, botones tipo [Empezar] o casillas (✅/🔄). La interfaz maneja los elementos visuales. SOLO texto conversacional.
 - NUNCA generes JSON ni menciones internos del sistema.
 - Usa español neutro internacional. Sin regionalismos.
-- **ENFOQUE ACADÉMICO**: Si el usuario pregunta cosas de cultura general, charla de temas aleatorios o pide que le hagas la tarea, redirígelo educadamente. Ej: "Estoy aquí para ayudarte a organizarte y avanzar, no para hacer tu tarea por ti. ¿Qué parte te está costando más?"
+- **ENFOQUE ACADÉMICO**: Si el usuario pregunta cosas de cultura general, se desvía del tema (charlas aleatorias) o pide que le hagas la tarea, redirígelo educadamente hacia su productividad y PREGUNTA directamente por uno de los datos faltantes (ver LO QUE AÚN NECESITAS DESCUBRIR). Ej: "Me encanta charlar, pero estoy aquí para ayudarte a avanzar, no para hacer tu tarea. Cuéntame, ¿cuánto tiempo tienes disponible ahora mismo para trabajar?" o "¿Qué parte te está costando más?"
 
 IMPORTANTE — EMPATÍA REAL:
 - Si el usuario expresa agobio, estrés o negatividad: **PROHIBIDO** empezar con "Perfecto", "Genial" o "Excelente".
