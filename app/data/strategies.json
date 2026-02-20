@@ -410,14 +410,14 @@
     "template": "Vamos a hacer esto súper simple, paso a paso.\n\n**Tu plan de {tiempo} min:**\n1. {paso_1}\n2. {paso_2}\n3. {paso_3}\n\n**Importante:** Haz UNO a la vez. No pienses en el siguiente hasta terminar el actual.\n\n¿Empezamos por el paso 1?",
     "template_en": "Let's make this super simple, step by step.\n\n**Your {tiempo} min plan:**\n1. {paso_1}\n2. {paso_2}\n3. {paso_3}\n\n**Important:** Do ONE at a time. Don't think about the next until finishing the current.\n\nStart with step 1?",
     "pasos": [
-      "{paso_1}",
-      "{paso_2}",
-      "{paso_3}"
+      "Comenzar la primera tarea de la lista",
+      "Avanzar a la siguiente acción específica",
+      "Finalizar la última pequeña tarea"
     ],
     "steps_en": [
-      "{paso_1}",
-      "{paso_2}",
-      "{paso_3}"
+      "Start the first task on the list",
+      "Move on to the next specific action",
+      "Finish the last small task"
     ]
   },
   {
@@ -441,17 +441,17 @@
     "template": "Vamos a seguir un protocolo estricto. 🧪\n\n**Instrucciones de {tiempo} min:**\nPaso 1: {paso_1_detallado}\nPaso 2: {paso_2_detallado}\nPaso 3: {paso_3_detallado}\n\n**REGLAS:**\n- No saltes pasos\n- No improvises\n- Si algo falla, anótalo y sigue\n\n¿Entendido el protocolo? 🔬",
     "template_en": "Let's follow a strict protocol. 🧪\n\n**{tiempo} min Instructions:**\nStep 1: {paso_1_detallado}\nStep 2: {paso_2_detallado}\nStep 3: {paso_3_detallado}\n\n**RULES:**\n- Don't skip steps\n- Don't improvise\n- If something fails, note it and continue\n\nProtocol understood? 🔬",
     "pasos": [
-      "{paso_1_detallado}",
-      "{paso_2_detallado}",
-      "{paso_3_detallado}",
+      "Ejecutar el primer paso rigurosamente",
+      "Seguir con el segundo paso del protocolo",
+      "Finalizar el tercer paso estricto",
       "No saltes pasos",
       "No improvises",
       "Si algo falla, anótalo y sigue"
     ],
     "steps_en": [
-      "{paso_1_detallado}",
-      "{paso_2_detallado}",
-      "{paso_3_detallado}",
+      "Execute the first step rigorously",
+      "Continue with the second protocol step",
+      "Finish the third strict step",
       "Don't skip steps",
       "Don't improvise",
       "If something fails, note it and continue"
@@ -477,14 +477,14 @@
     "template": "Aquí está tu checklist ultra-específico.\n\n**En {tiempo} min, completa:**\n- {item_1}\n- {item_2}\n- {item_3}\n\nToma tu tiempo y avanza uno por uno.\n\n¿Vamos por el primero? 📝",
     "template_en": "Here is your ultra-specific checklist.\n\n**In {tiempo} min, complete:**\n- {item_1}\n- {item_2}\n- {item_3}\n\nTake your time and go one by one.\n\nShall we go for the first? 📝",
     "pasos": [
-      "{item_1}",
-      "{item_2}",
-      "{item_3}"
+      "Completar el primer elemento del checklist",
+      "Verificar y completar el segundo elemento",
+      "Tachar el tercer elemento de la lista"
     ],
     "steps_en": [
-      "{item_1}",
-      "{item_2}",
-      "{item_3}"
+      "Complete the first checklist item",
+      "Verify and complete the second item",
+      "Cross off the third item on the list"
     ]
   },
   {
@@ -510,18 +510,18 @@
     "pasos": [
       "Timer activado (sin distracciones)",
       "Sigue esta secuencia EXACTA:",
-      "{paso_1} (5 min)",
-      "{paso_2} (5 min)",
-      "{paso_3} (5 min)",
+      "Primer objetivo del sprint (5 min)",
+      "Segundo objetivo del sprint (5 min)",
+      "Tercer objetivo del sprint (5 min)",
       "Si terminas antes, empieza el siguiente",
       "Meta: Completar los 3 pasos"
     ],
     "steps_en": [
       "Timer on (no distractions)",
       "Follow this EXACT sequence:",
-      "{paso_1} (5 min)",
-      "{paso_2} (5 min)",
-      "{paso_3} (5 min)",
+      "First sprint objective (5 min)",
+      "Second sprint objective (5 min)",
+      "Third sprint objective (5 min)",
       "If finished earlier, start next",
       "Goal: Complete the 3 steps"
     ]
