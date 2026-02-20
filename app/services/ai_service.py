@@ -627,7 +627,9 @@ El usuario NUNCA debe escuchar términos como "Enfoque de Promoción" o "Prevenc
 4. Keep responses under 100 words. Be concise. No walls of text.
 5. Use **bold** for key actions or strategy names.
 6. When you propose a strategy, frame it as an invitation: "Want to try...?" or "How about we...?"
-7. NEVER output JSON, NEVER mention slots, NEVER say "I need more information"."""
+7. NEVER output JSON, NEVER mention slots, NEVER say "I need more information".
+8. **ACADEMIC FOCUS**: If the user asks general knowledge questions, chats about random topics, or asks you to do their homework completely, politely redirect them. Ex: "I'm here to help you get your work done, not do it for you. What task are you avoiding right now?"
+9. **STEP-BY-STEP STRATEGY**: When explaining a strategy, break it down clearly into brief, sequential steps using the provided template instructions. Provide clear actionability."""
     else:
         formato = """REGLAS DE RESPUESTA (IMPORTANTE):
 1. **EMPATÍA REAL:** Si el usuario expresa agobio, estrés, cansancio o negatividad, **PROHIBIDO empezar con "Perfecto", "Genial" o "Excelente".**
@@ -646,7 +648,10 @@ El usuario NUNCA debe escuchar términos como "Enfoque de Promoción" o "Prevenc
    - Usa **negritas** para conceptos clave.
    - Máximo 80 palabras. Sé conciso.
 
-4. **COMANDOS OCULTOS (VISIBLES SOLO PARA TI):**
+4. **ENFOQUE ACADÉMICO:** Si el usuario pregunta cosas de cultura general, charla de temas aleatorios o pide que le hagas la tarea, redirígelo educadamente. Ej: "Estoy aquí para ayudarte a organizarte y avanzar, no para hacer tu tarea por ti. ¿Qué parte te está costando más?"
+5. **ESTRATEGIA PASO A PASO:** Cuando expliques una estrategia, usa el template proporcionado para desglosarla claramente en instrucciones secuenciales y manejables. No asumas pasos, explícalos de forma accionable.
+
+6. **COMANDOS OCULTOS (VISIBLES SOLO PARA TI):**
    - Si el usuario define un tiempo, añade AL FINAL: `__timer_config:{"duration_minutes": X}__`.
    - Si acuerdan estrategia, añade: `__strategy_confirmed__`."""
 
@@ -821,12 +826,20 @@ async def handle_user_turn(
                 excluir=rejected
             )
         
+        # I18N: Adaptar estrategia al idioma del usuario
+        if user_locale == "en":
+            estrategia["nombre"] = estrategia.get("nombre_en", estrategia["nombre"])
+            estrategia["descripcion"] = estrategia.get("descripcion_en", estrategia["descripcion"])
+            estrategia["template"] = estrategia.get("template_en", estrategia["template"])
+            estrategia["pasos"] = estrategia.get("steps_en", estrategia.get("pasos", []))
+            
         session.last_strategy = estrategia["nombre"]
         session.strategy_given = True
         
         hora_actual = datetime.now().strftime("%H:%M")
         system_prompt = get_system_prompt(enfoque, Q3, user_locale=user_locale, current_time=hora_actual)
         system_prompt += f"\n\nESTRATEGIA A APLICAR: {estrategia['nombre']}\nDESCRIPCIÓN: {estrategia['descripcion']}\nTEMPLATE: {estrategia['template']}\n"
+        system_prompt += "\nINSTRUCCIONES CLAVE: Usa el TEMPLATE anterior como base para tu respuesta. Asegúrate de dar los pasos claros y accionables al usuario. No resumas demasiado; el usuario necesita las instrucciones específicas.\n"
         system_prompt += f"\nVariables: tiempo={session.slots.tiempo_bloque or 15}, tema={session.slots.tipo_tarea}\n"
         
         messages = _build_llm_messages(system_prompt, chat_history, user_text)
@@ -849,7 +862,7 @@ async def handle_user_turn(
             {"label": "✅ Empezar", "value": "__accept_strategy__", "icon": "✅", "color": "mint"},
             {"label": "🔄 Otra opción", "value": "__reject_strategy__", "icon": "🔄", "color": "sky"}
         ]
-        return reply, session, quick_replies, {"strategy": estrategia["nombre"]}
+        return reply, session, quick_replies, {"strategy": estrategia["nombre"], "strategy_steps": estrategia.get("pasos", [])}
 
     # CASO B: Conversación libre con LLM (falta contexto o post-estrategia)
     hora_actual = datetime.now().strftime("%H:%M")
@@ -1126,6 +1139,7 @@ async def handle_user_turn_stream(
             estrategia["nombre"] = estrategia.get("nombre_en", estrategia["nombre"])
             estrategia["descripcion"] = estrategia.get("descripcion_en", estrategia["descripcion"])
             estrategia["template"] = estrategia.get("template_en", estrategia["template"])
+            estrategia["pasos"] = estrategia.get("steps_en", estrategia.get("pasos", []))
 
         session.last_strategy = estrategia["nombre"]
         session.strategy_given = True
@@ -1176,6 +1190,7 @@ async def handle_user_turn_stream(
         yield sse_event("metadata", {
             "strategy": estrategia["nombre"],
             "strategy_description": estrategia["descripcion"],
+            "strategy_steps": estrategia.get("pasos", []),
             "full_reply": full_reply
         })
         yield sse_event("session_state", session.model_dump(mode='json'))
@@ -1326,6 +1341,7 @@ YOUR MISSION:
 - NEVER ask more than ONE question per message.
 - CRITICAL: DO NOT output lists of options, buttons like [Start] or checkboxes (✅/🔄). The interface handles UI elements. ONLY output conversational text.
 - NEVER output JSON or mention system internals.
+- **ACADEMIC FOCUS**: If the user asks general knowledge questions, chats about random topics, or asks you to do their homework completely, politely redirect them. Ex: "I'm here to help you get your work done, not do it for you. What task are you avoiding right now?"
 
 EXAMPLES OF GOOD RESPONSES:
 ✅ "Being frustrated with a bug is the worst 😤 Tell me more — what are you working on? Sometimes just talking it through helps."
@@ -1357,6 +1373,7 @@ TU MISIÓN:
 - CRÍTICO: NO generes listas de opciones, botones tipo [Empezar] o casillas (✅/🔄). La interfaz maneja los elementos visuales. SOLO texto conversacional.
 - NUNCA generes JSON ni menciones internos del sistema.
 - Usa español neutro internacional. Sin regionalismos.
+- **ENFOQUE ACADÉMICO**: Si el usuario pregunta cosas de cultura general, charla de temas aleatorios o pide que le hagas la tarea, redirígelo educadamente. Ej: "Estoy aquí para ayudarte a organizarte y avanzar, no para hacer tu tarea por ti. ¿Qué parte te está costando más?"
 
 IMPORTANTE — EMPATÍA REAL:
 - Si el usuario expresa agobio, estrés o negatividad: **PROHIBIDO** empezar con "Perfecto", "Genial" o "Excelente".
