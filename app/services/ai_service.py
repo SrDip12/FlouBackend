@@ -649,7 +649,8 @@ El usuario NUNCA debe escuchar términos como "Enfoque de Promoción" o "Prevenc
    - Máximo 80 palabras. Sé conciso.
 
 4. **ENFOQUE ACADÉMICO:** Si el usuario pregunta cosas de cultura general, charla de temas aleatorios o pide que le hagas la tarea, redirígelo educadamente. Ej: "Estoy aquí para ayudarte a organizarte y avanzar, no para hacer tu tarea por ti. ¿Qué parte te está costando más?"
-5. **ESTRATEGIA PASO A PASO:** Cuando expliques una estrategia, usa el template proporcionado para desglosarla claramente en instrucciones secuenciales y manejables. No asumas pasos, explícalos de forma accionable."""
+5. **ESTRATEGIA PASO A PASO:** Cuando expliques una estrategia, usa el template proporcionado para desglosarla claramente en instrucciones secuenciales y manejables. No asumas pasos, explícalos de forma accionable.
+6. **PROHIBIDO EL USO DE VARIABLES INTERNAS:** BAJO NINGUNA CIRCUNSTANCIA uses texto como `__timer_config` o `timer_config:` o JSON visible en tu respuesta. El formato debe ser exclusivamente texto para el usuario."""
 
 
     # --- Ensamblaje final del prompt ---
@@ -787,8 +788,10 @@ async def handle_user_turn(
     tiene_tarea = bool(session.slots.tipo_tarea)
     tiene_tiempo = bool(session.slots.tiempo_bloque)
 
-    # Guardia de tiempo: solo si tiene tarea pero falta tiempo
-    if tiene_sentimiento and tiene_tarea and not tiene_tiempo and not session.strategy_given:
+    # Guardia de tiempo: solo si tiene tarea, plazo y fase pero falta tiempo
+    tiene_plazo_ht = bool(session.slots.plazo)
+    tiene_fase_ht = bool(session.slots.fase)
+    if tiene_sentimiento and tiene_tarea and tiene_plazo_ht and tiene_fase_ht and not tiene_tiempo and not session.strategy_given:
         return get_message("ask_time_variations", user_locale), session, [
             {"label": qr_texts["10_min"], "value": qr_texts["10_min_val"], "icon": "⚡", "color": "mint"},
             {"label": qr_texts["15_min"], "value": qr_texts["15_min_val"], "icon": "⏰", "color": "sky"},
@@ -797,7 +800,9 @@ async def handle_user_turn(
         ], {}
 
     # CASO A: Listo para estrategia
-    listo_para_estrategia = tiene_sentimiento and tiene_tarea and tiene_tiempo
+    tiene_plazo = bool(session.slots.plazo)
+    tiene_fase = bool(session.slots.fase)
+    listo_para_estrategia = tiene_sentimiento and tiene_tarea and tiene_plazo and tiene_fase and tiene_tiempo
     if listo_para_estrategia and not session.strategy_given:
         Q2, Q3, enfoque = infer_q2_q3(session.slots)
         session.metadata["Q2"] = Q2
@@ -1084,14 +1089,17 @@ async def handle_user_turn_stream(
     # Determinar si tenemos suficiente contexto para proponer una estrategia
     tiene_sentimiento = bool(session.slots.sentimiento)
     tiene_tarea = bool(session.slots.tipo_tarea)
+    tiene_plazo = bool(session.slots.plazo)
+    tiene_fase = bool(session.slots.fase)
     tiene_tiempo = bool(session.slots.tiempo_bloque)
-    listo_para_estrategia = tiene_sentimiento and tiene_tarea and tiene_tiempo
+    listo_para_estrategia = tiene_sentimiento and tiene_tarea and tiene_plazo and tiene_fase and tiene_tiempo
 
     # ─── GUARDIA DE TIEMPO: Solo si ya tenemos tarea pero falta tiempo ───
     # Así la pregunta de tiempo aparece EN CONTEXTO, justo antes de proponer
     # ─── GUARDIA DE TIEMPO: Solo si ya tenemos tarea pero falta tiempo ───
     # Así la pregunta de tiempo aparece EN CONTEXTO, justo antes de proponer
-    if tiene_sentimiento and tiene_tarea and not tiene_tiempo and not session.strategy_given:
+    # Así la pregunta de tiempo aparece EN CONTEXTO, justo antes de proponer
+    if tiene_sentimiento and tiene_tarea and tiene_plazo and tiene_fase and not tiene_tiempo and not session.strategy_given:
         yield sse_event("guardrail", {
             "text": get_message("ask_time_variations", user_locale),
             "quick_replies": [
